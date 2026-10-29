@@ -2,7 +2,7 @@ import "server-only";
 import { showById } from "@/data/shows";
 import { getDaySchedule, getEpisode, getEpisodes } from "@/lib/schedule";
 import { getTvmazeShow, type TvmazeEpisode, type TvmazeShow } from "@/lib/tvmaze";
-import { findTmdbId, getTmdbSeason, getTmdbShow, type TmdbEpisode, type TmdbShow } from "@/lib/tmdb";
+import { findTmdb, findTmdbId, getTmdbSeason, getTmdbShow, type TmdbEpisode, type TmdbShow } from "@/lib/tmdb";
 import { getWikipediaSummary } from "@/lib/wikipedia";
 import { findYoutubeVideo } from "@/lib/youtube";
 import { findDailymotionVideo } from "@/lib/dailymotion";
@@ -109,19 +109,26 @@ export async function getFullEpisode(show: Show, number: number): Promise<Episod
   const sources = await loadSources(show);
   const es = await spanishEpisodes(sources, seasonOf(sources.tv, number));
   const t = sources.tv?.episodes[number - 1];
-  const episode = mergeEpisode(getEpisode(show, number), t, t ? es.get(key(t.season, t.number)) : undefined);
-  return { ...episode, source: await resolveSource(show, episode, sources.tmdb?.name) };
+  const esEp = t ? es.get(key(t.season, t.number)) : undefined;
+  const episode = mergeEpisode(getEpisode(show, number), t, esEp);
+  const episodeNames = [usefulName(esEp?.name), t?.name].filter((n): n is string => !!n);
+  return { ...episode, source: await resolveSource(show, episode, sources.tmdb?.name, episodeNames) };
 }
 
 /** 1) data/videos.ts  2) YouTube  3) Dailymotion  4) sin fuente. */
-export async function resolveSource(show: Show, episode: Episode, localTitle?: string): Promise<VideoSource | undefined> {
+export async function resolveSource(
+  show: Show,
+  episode: Episode,
+  localTitle?: string,
+  episodeNames: string[] = [],
+): Promise<VideoSource | undefined> {
   if (episode.source) return episode.source;
   const series = localTitle ?? show.title;
-  const name = episode.season ? episode.title.replace(/^T\d+·E\d+ — /, "") : `capítulo ${episode.number}`;
+  const name = episodeNames[0] ?? `capítulo ${episode.number}`;
   const query = `${series} ${name} español latino`;
-  // El video tiene que nombrar la serie (en cualquiera de sus títulos) para evitar falsos positivos.
+  // El video tiene que nombrar la serie y el episodio para no pasar un capítulo equivocado.
   const names = [show.title, show.originalTitle, ...(localTitle ? [localTitle] : [])];
-  return (await findYoutubeVideo(query, names)) ?? (await findDailymotionVideo(query, names));
+  return (await findYoutubeVideo(query, names, episodeNames)) ?? (await findDailymotionVideo(query, names, episodeNames));
 }
 
 /** Grilla del día con títulos en español (las fuentes de video se piden aparte para cuidar la cuota). */
@@ -147,6 +154,17 @@ export async function getEnrichedSchedule(channelId: ChannelId, date: Date): Pro
     const t = d?.tv?.episodes[s.episode.number - 1];
     return { ...s, episode: mergeEpisode(s.episode, t, t ? d?.es.get(key(t.season, t.number)) : undefined) };
   });
+}
+
+/** Pósters de TMDB para la grilla de la biblioteca (solo TMDB: TVmaze limita a 20 req/10 s). */
+export async function getPosters(list: Show[]): Promise<Record<string, string>> {
+  const entries = await Promise.all(
+    list.map(async (s) => {
+      const poster = s.tmdbId ? (await getTmdbShow(s.tmdbId))?.poster : (await findTmdb(s.originalTitle, s.year))?.poster;
+      return [s.id, poster] as const;
+    }),
+  );
+  return Object.fromEntries(entries.filter((e): e is readonly [string, string] => !!e[1]));
 }
 
 /** "2026-10-29" → Date local a medianoche (o hoy si es inválida). */

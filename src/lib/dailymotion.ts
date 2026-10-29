@@ -1,5 +1,5 @@
 import "server-only";
-import { mentionsSeries } from "@/lib/text";
+import { mentionsEpisode, mentionsSeries } from "@/lib/text";
 import type { VideoSource } from "@/lib/types";
 
 /**
@@ -12,7 +12,7 @@ import type { VideoSource } from "@/lib/types";
  *                          (gratis). Sin él, el reproductor genérico puede responder "Forbidden".
  *
  * Solo acepta videos embebibles, en español, de al menos 5 minutos (para
- * descartar clips sueltos) y cuyo título mencione la serie.
+ * descartar clips sueltos) y cuyo título mencione la serie y el episodio.
  */
 const ONE_WEEK = 60 * 60 * 24 * 7;
 const MIN_SECONDS = 5 * 60;
@@ -29,7 +29,7 @@ interface DmVideo {
   "owner.id": string;
 }
 
-export async function findDailymotionVideo(query: string, seriesNames: string[]): Promise<VideoSource | undefined> {
+export async function findDailymotionVideo(query: string, seriesNames: string[], episodeNames: string[]): Promise<VideoSource | undefined> {
   if (!dailymotionEnabled()) return undefined;
   const owners = (process.env.DAILYMOTION_OWNERS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const params = new URLSearchParams({
@@ -48,7 +48,7 @@ export async function findDailymotionVideo(query: string, seriesNames: string[])
     });
     if (!res.ok) return undefined;
     const { list } = (await res.json()) as { list: DmVideo[] };
-    const hit = list.find((v) => v.allow_embed && v.duration >= MIN_SECONDS && mentionsSeries(v.title, seriesNames));
+    const hit = list.find((v) => v.allow_embed && v.duration >= MIN_SECONDS && mentionsSeries(v.title, seriesNames) && mentionsEpisode(v.title, episodeNames));
     return hit ? { type: "dailymotion", id: hit.id } : undefined;
   } catch {
     return undefined;

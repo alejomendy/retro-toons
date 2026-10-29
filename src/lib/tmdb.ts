@@ -79,13 +79,16 @@ interface RawTv {
   "watch/providers"?: { results: Record<string, { link: string; flatrate?: { provider_name: string; logo_path: string }[] }> };
 }
 
-/** Busca el ID de TMDB por título original y año de estreno. */
-export async function findTmdbId(originalTitle: string, year: number): Promise<number | null> {
-  type Res = { results: { id: number; first_air_date?: string }[] };
+/** Busca la serie en TMDB por título original y año de estreno. */
+export async function findTmdb(originalTitle: string, year: number): Promise<{ id: number; poster: string | null } | null> {
+  type Res = { results: { id: number; poster_path: string | null }[] };
   const withYear = await tmdb<Res>("/search/tv", { query: originalTitle, first_air_date_year: String(year), language: LANG });
-  if (withYear?.results[0]) return withYear.results[0].id;
-  const any = await tmdb<Res>("/search/tv", { query: originalTitle, language: LANG });
-  return any?.results[0]?.id ?? null;
+  const hit = withYear?.results[0] ?? (await tmdb<Res>("/search/tv", { query: originalTitle, language: LANG }))?.results[0];
+  return hit ? { id: hit.id, poster: hit.poster_path ? `${IMG}/w342${hit.poster_path}` : null } : null;
+}
+
+export async function findTmdbId(originalTitle: string, year: number): Promise<number | null> {
+  return (await findTmdb(originalTitle, year))?.id ?? null;
 }
 
 export async function getTmdbShow(id: number): Promise<TmdbShow | null> {

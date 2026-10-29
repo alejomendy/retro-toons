@@ -23,13 +23,19 @@ Todo prioriza **español latino**. Configuración en `.env.local` (ver `.env.exa
 | [YouTube Data API v3](https://developers.google.com/youtube/v3/docs/search/list) | Video embebible por episodio (`relevanceLanguage=es`) | `YOUTUBE_API_KEY` (gratis, ≈100 búsquedas/día) |
 | [Dailymotion](https://developers.dailymotion.com/api/) | Video embebible por episodio (`languages=es`) | No necesita para buscar; `NEXT_PUBLIC_DAILYMOTION_PLAYER_ID` para embeber |
 
-- Info de la serie: TMDB → Wikipedia → TVmaze.
-- Video de un episodio: `src/data/videos.ts` (a mano) → YouTube → Dailymotion → pantalla "sin señal". Solo se aceptan videos cuyo título nombre la serie.
+- Info de la serie: TMDB → Wikipedia → TVmaze. Pósters de la biblioteca: TMDB.
+- Video de un episodio: `src/data/videos.ts` (a mano) → YouTube → Dailymotion → pantalla "sin señal". Solo se aceptan videos cuyo título nombre la serie **y** el episodio (mejor "sin señal" que un capítulo equivocado).
 - Cache: TVmaze/TMDB 1 día, Wikipedia/YouTube/Dailymotion 7 días. Si una API falla, el sitio sigue con lo que tenga.
 
 > No existe una API legal que entregue episodios completos doblados al latino. YouTube y Dailymotion tienen sobre todo clips e intros subidos por usuarios. Cargá solo videos sobre los que tengas derechos o publicados oficialmente; con `YOUTUBE_CHANNEL_IDS` / `DAILYMOTION_OWNERS` limitás la búsqueda a canales oficiales.
 
-Descartadas: Fanart.tv (logos, pide clave y ID de TheTVDB), TheTVDB (pago), Pluto TV (tiene canales clásicos gratis y legales en Latinoamérica, pero no ofrece API ni embed).
+Descartadas: Fanart.tv (logos, pide clave y ID de TheTVDB), TheTVDB (pago), Jikan/MyAnimeList (solo sirve para el anime y TMDB ya lo cubre en español), Pluto TV (tiene canales clásicos gratis y legales en Latinoamérica, pero no ofrece API ni embed).
+
+## Agregar una serie
+
+1. Buscá su ID en TVmaze: `https://api.tvmaze.com/search/shows?q=<título en inglés>` (fijate el año de estreno).
+2. Agregala en `src/data/shows.ts` con `tvmazeId`, `originalTitle` y `episodeCount` (cantidad de episodios en TVmaze). `tmdbId` es opcional: si falta se busca por título + año.
+3. Sumá su `id` a uno o más bloques en `src/data/channels.ts` para que aparezca en la programación.
 
 ## API propia
 

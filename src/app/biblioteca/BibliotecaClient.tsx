@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -19,7 +20,7 @@ function decadeOf(year: number): Decade {
   return "00s";
 }
 
-export default function BibliotecaClient() {
+export default function BibliotecaClient({ posters }: { posters: Record<string, string> }) {
   const params = useSearchParams();
   const initialChannel = params.get("canal");
   const [query, setQuery] = useState("");
@@ -70,9 +71,14 @@ export default function BibliotecaClient() {
         {results.map((s) => (
           <li key={s.id}>
             <Link href={`/biblioteca/${s.id}`} className="chunky group block overflow-hidden rounded-xl bg-panel transition-transform hover:-translate-y-1">
-              <ShowCover show={s} />
+              {posters[s.id] ? (
+                <Image src={posters[s.id]} alt="" width={342} height={513} className="aspect-[2/3] w-full object-cover" />
+              ) : (
+                <ShowCover show={s} className="!aspect-[2/3]" />
+              )}
               <div className="space-y-1.5 border-t-4 border-black p-3">
-                <p className="text-xs text-white/60">{s.genre} · {s.episodeCount} episodios</p>
+                <p className="font-bold leading-tight">{s.title}</p>
+                <p className="text-xs text-white/60">{s.year} · {s.genre} · {s.episodeCount} episodios</p>
                 <div className="flex flex-wrap gap-1">
                   {s.channels.map((c) => <ChannelBadge key={c} id={c} />)}
                 </div>

@@ -1,5 +1,5 @@
 import "server-only";
-import { mentionsSeries } from "@/lib/text";
+import { mentionsEpisode, mentionsSeries } from "@/lib/text";
 import type { VideoSource } from "@/lib/types";
 
 /**
@@ -35,7 +35,7 @@ interface SearchItem {
   snippet: { channelId: string; title: string };
 }
 
-async function search(q: string, channels: string[], seriesNames: string[]): Promise<string | null> {
+async function search(q: string, channels: string[], seriesNames: string[], episodeNames: string[]): Promise<string | null> {
   const params = new URLSearchParams({
     part: "snippet",
     type: "video",
@@ -62,7 +62,7 @@ async function search(q: string, channels: string[], seriesNames: string[]): Pro
     const data = (await res.json()) as { items?: SearchItem[] };
     const items = data.items ?? [];
     const hit = items.find(
-      (i) => (!channels.length || channels.includes(i.snippet.channelId)) && mentionsSeries(i.snippet.title, seriesNames),
+      (i) => (!channels.length || channels.includes(i.snippet.channelId)) && mentionsSeries(i.snippet.title, seriesNames) && mentionsEpisode(i.snippet.title, episodeNames),
     );
     return hit?.id.videoId ?? null;
   } catch {
@@ -71,11 +71,11 @@ async function search(q: string, channels: string[], seriesNames: string[]): Pro
 }
 
 /**
- * Busca un video embebible para el episodio cuyo título mencione la serie.
+ * Busca un video embebible cuyo título mencione la serie y el episodio.
  * Devuelve undefined si no hay key o no encuentra nada.
  */
-export async function findYoutubeVideo(query: string, seriesNames: string[]): Promise<VideoSource | undefined> {
+export async function findYoutubeVideo(query: string, seriesNames: string[], episodeNames: string[]): Promise<VideoSource | undefined> {
   if (!youtubeEnabled()) return undefined;
-  const id = await search(query, allowedChannels(), seriesNames);
+  const id = await search(query, allowedChannels(), seriesNames, episodeNames);
   return id ? { type: "youtube", id } : undefined;
 }
