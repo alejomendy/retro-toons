@@ -15,5 +15,5 @@ jobs:
     steps:
       - name: Ping al manifiesto del addon
         env:
-          ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-addon.onrender.com' }}
+          ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv.onrender.com' }}
         run: curl -fsS --max-time 120 -o /dev/null -w "%{http_code} en %{time_total}s\n" "$ADDON_URL/manifest.json"

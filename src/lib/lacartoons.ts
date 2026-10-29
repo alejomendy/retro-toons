@@ -242,6 +242,6 @@ export async function fetchGenres(): Promise<string[]> {
  * Fuentes en caché 3 h: las URLs firmadas de ok.ru vencen a las ~24 h, así que es seguro y
  * evita esperar de nuevo al addon (que tarda 5-30 s) al volver a abrir un episodio.
  */
-export const fetchStreamsCached = unstable_cache((episodeId: string) => fetchStreams(episodeId), ["lacartoons-streams"], {
+export const fetchStreamsCached = unstable_cache((episodeId: string) => fetchStreams(episodeId), ["lacartoons-streams-v2"], {
   revalidate: 3 * 60 * 60,
 });

@@ -124,7 +124,7 @@ const playableCache = unstable_cache(
       probeQueue.shift()?.();
     }
   },
-  ["lacartoons-playable"],
+  ["lacartoons-playable-v2"],
   { revalidate: 12 * 60 * 60 },
 );
 
