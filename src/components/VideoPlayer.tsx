@@ -15,6 +15,8 @@ type VideoPlayerProps = {
     /** Se llama periódicamente, al pausar y al salir del episodio. */
     onProgress?: (episodeId: string, position: number, duration: number) => void;
     onEnded?: (episodeId: string) => void;
+    /** Cuando el episodio empieza a reproducirse de verdad (para transiciones en vivo). */
+    onPlaying?: (episodeId: string) => void;
     /**
      * Modo "en vivo" para la programación: llena el contenedor (la tele), sin selector de fuente,
      * pasa sola a otra fuente si una falla y descuenta el tiempo que tardó en sintonizar.
@@ -65,6 +67,7 @@ export default function VideoPlayer({
     autoPlay = false,
     onProgress,
     onEnded,
+    onPlaying,
     live = false,
 }: VideoPlayerProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -80,7 +83,7 @@ export default function VideoPlayer({
     // Valores que leen los listeners de Video.js sin tener que volver a registrarlos.
     const episodeRef = useRef(episodeId);
     const streamRef = useRef<LcStream | null>(null);
-    const callbacksRef = useRef({ onProgress, onEnded });
+    const callbacksRef = useRef({ onProgress, onEnded, onPlaying });
     const pendingSeekRef = useRef(0);
     /** Cuándo se pidió el episodio (en vivo, el tiempo que pasa cargando también "sale al aire"). */
     const requestedAtRef = useRef(0);
@@ -92,8 +95,8 @@ export default function VideoPlayer({
     const reportRef = useRef<() => void>(() => {});
 
     useEffect(() => {
-        callbacksRef.current = { onProgress, onEnded };
-    }, [onProgress, onEnded]);
+        callbacksRef.current = { onProgress, onEnded, onPlaying };
+    }, [onProgress, onEnded, onPlaying]);
 
     // Inicializar y destruir Video.js (una sola instancia por montaje).
     useEffect(() => {
@@ -158,7 +161,12 @@ export default function VideoPlayer({
                 });
             }
         });
-        player.on("playing", () => setPlaybackError(""));
+        player.on("playing", () => {
+            setPlaybackError("");
+            if (activeEpisodeRef.current && activeEpisodeRef.current === episodeRef.current) {
+                callbacksRef.current.onPlaying?.(activeEpisodeRef.current);
+            }
+        });
         player.on("timeupdate", () => {
             if (Date.now() - lastReportRef.current >= PROGRESS_INTERVAL_MS) report();
         });

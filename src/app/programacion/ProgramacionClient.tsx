@@ -59,6 +59,17 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
   const current = now ? slots.find((s) => nowMin >= s.start && nowMin < s.end) : undefined;
   const currentIndex = current ? slots.indexOf(current) : -1;
   const upcoming = current ? slots.slice(currentIndex + 1, currentIndex + 4) : [];
+  // El reloj general avanza cada 10 s; para cambiar de programa justo a la hora de la grilla
+  // se agenda un tic exacto en el fin del espacio actual.
+  const currentEnd = current?.end;
+  useEffect(() => {
+    if (currentEnd === undefined || !now) return;
+    const midnight = new Date(now);
+    midnight.setHours(0, 0, 0, 0);
+    const ms = midnight.getTime() + currentEnd * 60_000 - Date.now();
+    const id = window.setTimeout(() => setNow(new Date()), Math.max(0, ms) + 50);
+    return () => window.clearTimeout(id);
+  }, [currentEnd, now]);
   // Faltando 5 minutos para el próximo programa, se dejan listas sus fuentes.
   const nextUp = upcoming[0];
   const nextSoon = !!nextUp && !nextUp.external && nextUp.start - nowMin <= 5;
@@ -242,10 +253,19 @@ function toDateParam(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Segundos transcurridos del espacio, con la hora exacta de ahora (no la del último tic del reloj). */
+function secondsIntoSlot(slot: LcSlot): number {
+  return Math.max(0, (minutesNow(new Date()) - slot.start) * 60);
+}
+
+/** Si el episodio no arrancó en este tiempo, se saca la placa del canal y se ve el estado real del reproductor. */
+const IDENT_MAX_MS = 25_000;
+
 /**
  * La tele en vivo: reproduce el episodio del espacio actual desde el minuto que corresponde.
  * El reproductor es uno solo para todo el día; al cambiar de espacio cambia el episodio.
- * Si el episodio termina antes que el espacio, pasa la tanda hasta el siguiente.
+ * Transiciones como en la tele: placa del canal mientras sintoniza, zócalo "Estás viendo" al arrancar
+ * y tanda con cuenta regresiva si el episodio termina antes que su espacio.
  */
 function LiveTv({
   slot,
@@ -265,16 +285,30 @@ function LiveTv({
   const channel = channelById[channelId];
   const slotKey = `${channelId}-${slot.start}`;
   // El punto de arranque se fija al sintonizar el espacio; después el video corre solo.
-  const [tuned, setTuned] = useState({ key: slotKey, startAt: (minutesNow(now) - slot.start) * 60 });
+  const [tuned, setTuned] = useState(() => ({ key: slotKey, startAt: secondsIntoSlot(slot) }));
   const [endedKey, setEndedKey] = useState<string | null>(null);
+  const [playingKey, setPlayingKey] = useState<string | null>(null);
+  const [identExpiredKey, setIdentExpiredKey] = useState<string | null>(null);
   if (tuned.key !== slotKey) {
-    setTuned({ key: slotKey, startAt: (minutesNow(now) - slot.start) * 60 });
+    setTuned({ key: slotKey, startAt: secondsIntoSlot(slot) });
   }
   const handleEnded = useCallback(() => setEndedKey(slotKey), [slotKey]);
+  const handlePlaying = useCallback(() => setPlayingKey(slotKey), [slotKey]);
+
   // Fuentes externas (iframe de YouTube, Pluto TV): no avisan cuándo terminan, se usa la duración del episodio.
-  const externalOver = !!slot.external && (minutesNow(now) - slot.start) >= slot.external.minutes;
+  const externalOver = !!slot.external && minutesNow(now) - slot.start >= slot.external.minutes;
   const inBreak = endedKey === slotKey || externalOver;
-  const bumper = <Bumper channelName={channel.name} color={channel.color} ink={channel.ink} next={next} />;
+
+  // La placa del canal tapa la carga del episodio nuevo (o se va sola si tarda demasiado).
+  useEffect(() => {
+    const id = window.setTimeout(() => setIdentExpiredKey(slotKey), IDENT_MAX_MS);
+    return () => window.clearTimeout(id);
+  }, [slotKey]);
+  const showIdent = !slot.external && !inBreak && playingKey !== slotKey && identExpiredKey !== slotKey;
+  // El zócalo aparece cuando arranca el episodio (en los externos, al sintonizar).
+  const showLowerThird = !inBreak && (slot.external ? true : playingKey === slotKey);
+
+  const bumper = <Bumper channelId={channelId} next={next} />;
 
   if (slot.external) {
     return (
@@ -303,7 +337,13 @@ function LiveTv({
       badgeColor={inBreak ? "#7c3aed" : "#ef4444"}
       overlay={
         <>
-          <VideoPlayer episodeId={slot.episode.id} startAt={tuned.startAt} autoPlay live onEnded={handleEnded} />
+          <VideoPlayer episodeId={slot.episode.id} startAt={tuned.startAt} autoPlay live onEnded={handleEnded} onPlaying={handlePlaying} />
+          {showIdent && (
+            <div className="absolute inset-0 z-20">
+              <ChannelIdent channelId={channelId} slot={slot} />
+            </div>
+          )}
+          {showLowerThird && <LowerThird key={slotKey} slot={slot} color={channel.color} ink={channel.ink} />}
           {inBreak && <div className="absolute inset-0 z-20">{bumper}</div>}
         </>
       }
@@ -314,17 +354,99 @@ function LiveTv({
   );
 }
 
-function Bumper({ channelName, color, ink, next }: { channelName: string; color: string; ink: string; next?: LcSlot }) {
+/** Placa del canal mientras se sintoniza el episodio nuevo (en vez de estática). */
+function ChannelIdent({ channelId, slot }: { channelId: ChannelId; slot: LcSlot }) {
+  const c = channelById[channelId];
   return (
-    <div className="absolute inset-0 grid place-items-center p-6 text-center" style={{ backgroundColor: color, color: ink }}>
-      <div>
-        <p className="font-mono text-2xl opacity-80">Estás viendo {channelName}</p>
-        <p className="font-display text-3xl sm:text-5xl">¡Ya volvemos!</p>
-        {next && (
-          <p className="mt-3 font-mono text-2xl">
-            A continuación: <strong>{next.series.name}</strong> · {formatTime(next.start)}
+    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: c.color, color: c.ink }}>
+      <div className="checker absolute inset-x-0 top-0 h-3 opacity-30" aria-hidden />
+      <div className="checker absolute inset-x-0 bottom-0 h-3 opacity-30" aria-hidden />
+      <div className="absolute inset-0 grid place-items-center p-6 text-center">
+        <div className="space-y-3">
+          <p className="osd font-mono text-4xl sm:text-6xl">CH {channelNumber(channelId)}</p>
+          <p className="font-display text-3xl leading-none [text-shadow:3px_3px_0_#000] sm:text-6xl">{c.name}</p>
+          <SlotCard slot={slot} label={`AHORA · ${formatTime(slot.start)}`} labelClass="text-red-400" />
+          <p className="flex items-center justify-center gap-2 font-mono text-lg opacity-80">
+            <span className="blink size-2 rounded-full bg-current" /> Sintonizando…
           </p>
-        )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Ficha chica de un programa (póster, nombre y episodio) para la placa del canal y la tanda. */
+function SlotCard({ slot, label, labelClass, aside }: { slot: LcSlot; label: string; labelClass: string; aside?: React.ReactNode }) {
+  return (
+    <div className="mx-auto flex max-w-md items-center gap-3 rounded-xl border-4 border-black bg-black/60 p-3 text-left text-white">
+      {slot.series.poster && (
+        <Image src={slot.series.poster} alt="" width={48} height={72} className="h-16 w-11 shrink-0 rounded border-2 border-black object-cover" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className={`font-mono text-lg leading-none ${labelClass}`}>{label}</p>
+        <p className="truncate font-display text-lg">{slot.series.name}</p>
+        <p className="truncate text-sm text-white/70">
+          {episodeLabel(slot.episode)} · {slot.episode.title}
+        </p>
+      </div>
+      {aside}
+    </div>
+  );
+}
+
+/** Zócalo "Estás viendo" que aparece unos segundos cuando arranca el episodio. */
+function LowerThird({ slot, color, ink }: { slot: LcSlot; color: string; ink: string }) {
+  return (
+    <div className="lower-third pointer-events-none absolute bottom-16 left-3 z-20 max-w-[80%] sm:bottom-20 sm:left-5" aria-hidden>
+      <div className="flex items-stretch overflow-hidden rounded-lg border-4 border-black shadow-[4px_4px_0_#000]">
+        <span className="flex items-center px-2 font-display text-xs uppercase sm:text-sm" style={{ backgroundColor: color, color: ink }}>
+          Estás viendo
+        </span>
+        <span className="min-w-0 bg-black/85 px-3 py-1 text-white">
+          <span className="block truncate font-display text-sm sm:text-base">{slot.series.name}</span>
+          <span className="block truncate font-mono text-base leading-tight text-white/75">
+            {episodeLabel(slot.episode)} · {slot.episode.title}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Tanda entre programas: cuenta regresiva al próximo y su ficha. Deja listas sus fuentes. */
+function Bumper({ channelId, next }: { channelId: ChannelId; next?: LcSlot }) {
+  const c = channelById[channelId];
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => tick((n) => n + 1), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  // Apenas empieza la tanda se piden las fuentes del próximo episodio, así arranca a horario.
+  useEffect(() => {
+    if (next && !next.external) prefetchStreams(next.episode.id);
+  }, [next]);
+
+  const left = next ? Math.max(0, Math.round((next.start - minutesNow(new Date())) * 60)) : 0;
+  const countdown = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+
+  return (
+    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: c.color, color: c.ink }}>
+      <div className="checker absolute inset-x-0 top-0 h-3 opacity-30" aria-hidden />
+      <div className="absolute inset-0 grid place-items-center p-6 text-center">
+        <div className="space-y-3">
+          <p className="font-mono text-xl opacity-80 sm:text-2xl">
+            Estás viendo {c.name} · CH {channelNumber(channelId)}
+          </p>
+          <p className="font-display text-3xl leading-none [text-shadow:3px_3px_0_#000] sm:text-5xl">{next && left <= 30 ? "¡Ya empieza!" : "¡Ya volvemos!"}</p>
+          {next && (
+            <SlotCard
+              slot={next}
+              label={`A CONTINUACIÓN · ${formatTime(next.start)}`}
+              labelClass="text-accent"
+              aside={<span className="osd shrink-0 font-mono text-3xl tabular-nums">{countdown}</span>}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

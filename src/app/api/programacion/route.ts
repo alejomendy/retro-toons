@@ -1,8 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isChannelId } from "@/data/channels";
-import { parseDateParam } from "@/lib/catalog";
 import { lcErrorResponse } from "@/lib/lacartoons";
-import { getLcSchedule } from "@/lib/lacartoons-schedule";
+import { getCachedSchedule } from "@/lib/lacartoons-schedule";
 
 // El addon en el plan gratis de Render tarda hasta ~50 s en despertar.
 export const maxDuration = 60;
@@ -16,9 +15,11 @@ export async function GET(req: NextRequest) {
   const canal = req.nextUrl.searchParams.get("canal");
   if (!isChannelId(canal)) return NextResponse.json({ success: false, error: "Canal inválido", code: "INVALID_ID" }, { status: 400 });
 
-  const fecha = parseDateParam(req.nextUrl.searchParams.get("fecha"));
+  const param = req.nextUrl.searchParams.get("fecha");
+  const today = new Date();
+  const fecha = param && /^\d{4}-\d{2}-\d{2}$/.test(param) ? param : `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   try {
-    const slots = await getLcSchedule(canal, fecha);
+    const slots = await getCachedSchedule(canal, fecha);
     return NextResponse.json({ success: true, canal, slots });
   } catch (error) {
     return lcErrorResponse(error, "programación");

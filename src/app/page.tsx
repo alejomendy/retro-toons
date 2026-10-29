@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CalendarClock, Library } from "lucide-react";
 import { channels } from "@/data/channels";
-import { fetchGenres } from "@/lib/lacartoons";
+import { getGenres } from "@/lib/lacartoons-schedule";
 import { OnAirProvider } from "@/lib/use-on-air";
 import ContinueWatching from "@/components/series/ContinueWatching";
 import { SectionTitle } from "@/components/PageHeader";
@@ -14,7 +14,7 @@ const brandByGenre = new Map(channels.map((c) => [c.name, { bg: c.color, ink: c.
 
 export default async function Home() {
   // Cadenas reales del catálogo (si el addon no responde, la sección no se muestra).
-  const genres = await fetchGenres();
+  const genres = await getGenres();
 
   return (
     <OnAirProvider>

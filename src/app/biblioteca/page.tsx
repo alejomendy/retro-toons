@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { fetchGenres } from "@/lib/lacartoons";
+import { getGenres } from "@/lib/lacartoons-schedule";
 import ContinueWatching from "@/components/series/ContinueWatching";
 import PageHeader, { SectionTitle } from "@/components/PageHeader";
 import BibliotecaClient from "./BibliotecaClient";
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 
 export default async function BibliotecaPage() {
   // Cadenas reales declaradas por el addon (si no responde, no se muestran esos filtros).
-  const genres = await fetchGenres();
+  const genres = await getGenres();
   return (
     <div className="space-y-12">
       <PageHeader kicker="A demanda · como en el videoclub" title="Biblioteca" kickerColor="#ffd400" kickerInk="#000000">

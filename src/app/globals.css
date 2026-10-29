@@ -105,6 +105,15 @@ body {
 }
 .osd-flash { animation: osd-fade 3.5s ease-out forwards; }
 
+/* Zócalo "Estás viendo": entra deslizando, queda unos segundos y se va */
+@keyframes lower-third {
+  0% { opacity: 0; transform: translateX(-24px); }
+  6%, 85% { opacity: 1; transform: translateX(0); }
+  100% { opacity: 0; transform: translateX(-24px); }
+}
+.lower-third { animation: lower-third 8s ease-out forwards; }
+
 @media (prefers-reduced-motion: reduce) {
   .static-noise, .blink, .marquee, .osd-flash { animation: none; }
+  .lower-third { animation: none; opacity: 0; }
 }

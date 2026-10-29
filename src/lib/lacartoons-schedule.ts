@@ -1,11 +1,11 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
-import { after } from "next/server";
 import { blocksForDay, channelById } from "@/data/channels";
 import { showById } from "@/data/shows";
 import { dayNumber, toMinutes } from "./schedule";
 import { getAvailableEpisodes, getFullEpisode, getPosters } from "./catalog";
-import { fetchCatalog, fetchSeries, fetchStreamsCached, LcError } from "./lacartoons";
+import { fetchCatalog, fetchGenres, fetchSeries, LcError } from "./lacartoons";
+import playableList from "@/data/playable.json";
 import { withArtwork } from "./artwork";
 import type { LcSeries, LcSeriesSummary, LcSlot } from "./lacartoons-types";
 import type { ChannelId, Show, VideoSource } from "./types";
@@ -32,7 +32,8 @@ const EXTERNAL = "ext:";
 const MIN_EXTERNAL_MINUTES = 15;
 const MAX_CATALOG_PAGES = 40;
 const DAY_MINUTES = 24 * 60;
-const CACHE_SECONDS = 6 * 60 * 60;
+// El catálogo y las fichas cambian poco: un día de caché le ahorra muchas consultas al addon.
+const CACHE_SECONDS = 24 * 60 * 60;
 
 /** Todo el catálogo (viene paginado de a 20). */
 const fullCatalog = unstable_cache(
@@ -108,57 +109,24 @@ function shuffled<T>(list: T[], random: () => number): T[] {
 const unique = <T,>(list: T[]) => [...new Set(list)];
 
 /**
- * ¿La serie tiene video que el navegador pueda reproducir? Se prueba un episodio (todos suelen estar en
- * el mismo host) y el resultado se guarda 24 h. Si el addon no contesta a tiempo, se asume que sí
- * (no se guarda) para no vaciar la grilla por un addon dormido.
+ * ¿La serie tiene video que el navegador pueda reproducir? Sale de data/playable.json, que arma
+ * scripts/check-playable.mjs una vez por semana. Nunca se consulta al addon durante una visita:
+ * eso lo saturaba y hacía que la grilla cambiara al recargar. Series sin dato: se asume que sí.
  */
-const playableCache = unstable_cache(
-  async (episodeId: string) => {
-    // La cola solo frena las consultas reales al addon; si ya está en caché, esto ni se ejecuta.
-    if (activeProbes >= MAX_PROBES) await new Promise<void>((resolve) => probeQueue.push(resolve));
-    activeProbes++;
-    try {
-      return (await fetchStreamsCached(episodeId)).length > 0;
-    } finally {
-      activeProbes--;
-      probeQueue.shift()?.();
-    }
-  },
-  ["lacartoons-playable-v2"],
-  { revalidate: 24 * 60 * 60 },
-);
-
-/** Pocas consultas de fuentes a la vez: el addon (plan gratis) tiene muy poca CPU. */
-const MAX_PROBES = 2;
-let activeProbes = 0;
-const probeQueue: (() => void)[] = [];
-
-async function probe(series: LcSeries): Promise<boolean> {
-  try {
-    return await playableCache(series.videos[0].id);
-  } catch {
-    return true;
-  }
+function isPlayable(series: LcSeries): boolean {
+  return (playableList.series as Record<string, { playable: boolean } | undefined>)[series.id]?.playable !== false;
 }
 
-/** Tiempo máximo que la grilla espera las pruebas (Vercel corta a los 60 s y el addon puede tardar 30 s por episodio). */
-const PROBE_BUDGET_MS = 20_000;
-
-/**
- * Prueba con tope de tiempo: lo que no termina a tiempo se da por reproducible en esta grilla
- * y la prueba sigue después de responder (`after`), así la próxima visita ya la tiene en caché.
- */
-function isPlayableWithin(series: LcSeries, deadline: number, pending: Promise<unknown>[]): Promise<boolean> {
-  const result = probe(series);
-  pending.push(result);
-  const left = Math.max(0, deadline - Date.now());
-  return Promise.race([result, new Promise<boolean>((resolve) => setTimeout(() => resolve(true), left))]);
+/** Semana (desde una fecha fija, empezando el lunes): el orden de las series en cada franja se renueva cada semana. */
+function weekNumber(date: Date): number {
+  return Math.floor((dayNumber(date) + 3) / 7);
 }
 
 export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<LcSlot[]> {
   const channel = channelById[channelId];
   const day = dayNumber(date);
-  const random = seededRandom(hash(channelId) ^ day);
+  const week = weekNumber(date);
+  const random = seededRandom(hash(channelId) ^ week);
 
   const catalog = (await fullCatalog()).map((series) => ({ series, key: normalize(series.name) }));
   // La programación cambia según el día de la semana (franjas de lunes a viernes, sábado y domingo).
@@ -185,15 +153,12 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
   // Solo sirven las que tienen episodios que se puedan reproducir.
   const loaded = new Map<string, LcSeries>();
   const unplayable = new Set<string>();
-  const deadline = Date.now() + PROBE_BUDGET_MS;
-  const probes: Promise<unknown>[] = [];
-  after(() => Promise.allSettled(probes));
   const load = async (ids: string[]) => {
     const metas = await Promise.all(ids.map((id) => cachedSeries(id).catch(() => null)));
     await Promise.all(
       metas.map(async (s) => {
         if (!s || s.videos.length === 0) return;
-        if (await isPlayableWithin(s, deadline, probes)) loaded.set(s.id, s);
+        if (isPlayable(s)) loaded.set(s.id, s);
         else unplayable.add(s.id);
       }),
     );
@@ -243,8 +208,9 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
     const pool = own.length >= MIN_BLOCK_SERIES || (block.exclusive && own.length > 0) ? own : unique([...own, ...channelPool]);
     const length = block.slotMinutes ?? 30;
     const end = Math.min(toMinutes(block.end), DAY_MINUTES);
-    // Cada día el bloque arranca por una serie distinta.
-    const offset = day % pool.length;
+    // Como en la tele: de lunes a domingo cada franja mantiene su orden (cada serie en su horario)
+    // y se renueva la semana siguiente. Los episodios sí avanzan todos los días.
+    const offset = (week + b) % pool.length;
     for (let t = toMinutes(block.start), i = 0; t < end; t += length, i++) {
       const key = pool[(offset + i) % pool.length];
       const nth = airedToday.get(key) ?? 0;
@@ -338,9 +304,6 @@ export interface ExternalSeries {
  */
 export async function getExternalSeries(): Promise<ExternalSeries[]> {
   const catalog = (await fullCatalog()).map((series) => ({ series, key: normalize(series.name) }));
-  const deadline = Date.now() + PROBE_BUDGET_MS;
-  const probes: Promise<unknown>[] = [];
-  after(() => Promise.allSettled(probes));
 
   const candidates = await Promise.all(
     Object.values(showById).map(async (show) => {
@@ -348,7 +311,7 @@ export async function getExternalSeries(): Promise<ExternalSeries[]> {
       if (found) {
         // Si en LACartoons se puede ver, no hace falta otra fuente.
         const series = await cachedSeries(found.id).catch(() => null);
-        if (series && series.videos.length > 0 && (await isPlayableWithin(series, deadline, probes))) return null;
+        if (series && series.videos.length > 0 && isPlayable(series)) return null;
       }
       const numbers = await getAvailableEpisodes(show).catch(() => []);
       return numbers.length > 0 ? show : null;
@@ -360,3 +323,42 @@ export async function getExternalSeries(): Promise<ExternalSeries[]> {
     .map((s) => ({ id: s.id, name: s.title, poster: posters[s.id] ?? null, year: s.year }))
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
+
+const PAGE_SIZE = 20;
+
+/**
+ * Búsqueda y exploración sobre el catálogo en caché (24 h) en vez de consultar al addon en cada
+ * visita: es más rápido y sigue andando aunque el addon esté ocupado. Con búsqueda devuelve todo lo
+ * que coincide; sin búsqueda, páginas de 20 como el addon.
+ */
+export async function searchCachedCatalog({ search, genre, skip = 0 }: { search?: string; genre?: string; skip?: number }): Promise<LcSeriesSummary[]> {
+  let list = await fullCatalog();
+  if (genre) list = list.filter((s) => s.genres.includes(genre));
+  if (search) {
+    const words = normalize(search).split(" ").filter(Boolean);
+    const raw = search.toLowerCase();
+    return list.filter((s) => (words.length > 0 ? words.every((w) => normalize(s.name).includes(w)) : s.name.toLowerCase().includes(raw)));
+  }
+  return list.slice(skip, skip + PAGE_SIZE);
+}
+
+/** Cadenas del catálogo: las del manifiesto del addon o, si no responde, las del catálogo en caché. */
+export async function getGenres(): Promise<string[]> {
+  const fromManifest = await fetchGenres();
+  if (fromManifest.length > 0) return fromManifest;
+  const all = await fullCatalog().catch(() => []);
+  return unique(all.flatMap((s) => s.genres));
+}
+
+/**
+ * Grilla en caché por canal y día. Es determinística, así que se guarda hasta que cambie la lista
+ * de series con video (data/playable.json se actualiza cada semana).
+ */
+export const getCachedSchedule = unstable_cache(
+  async (channelId: ChannelId, fecha: string) => {
+    const [y, m, d] = fecha.split("-").map(Number);
+    return getLcSchedule(channelId, new Date(y, m - 1, d));
+  },
+  ["lacartoons-schedule", String(playableList.checkedAt ?? "sin-lista")],
+  { revalidate: 7 * 24 * 60 * 60 },
+);
