@@ -1,55 +1,110 @@
 import Link from "next/link";
 import { CalendarClock, Library } from "lucide-react";
 import { channels } from "@/data/channels";
-import { shows } from "@/data/shows";
-import { NoSignal } from "@/components/TvPlayer";
+import { fetchGenres } from "@/lib/lacartoons";
+import { OnAirProvider } from "@/lib/use-on-air";
+import ContinueWatching from "@/components/series/ContinueWatching";
+import { SectionTitle } from "@/components/PageHeader";
+import { HeroTv, OnAirChannels, OnAirTicker } from "./HomeLive";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+/** Colores de marca para las cadenas que coinciden con un canal. */
+const brandByGenre = new Map(channels.map((c) => [c.name, { bg: c.color, ink: c.ink }]));
+
+export default async function Home() {
+  // Cadenas reales del catálogo (si el addon no responde, la sección no se muestra).
+  const genres = await fetchGenres();
+
   return (
-    <div className="space-y-12">
-      <section className="grid items-center gap-8 lg:grid-cols-2">
-        <div className="space-y-5">
-          <h1 className="font-display text-4xl leading-tight text-accent [text-shadow:4px_4px_0_#000] sm:text-6xl">
-            Volvé a la tarde después del cole
-          </h1>
-          <p className="text-lg text-white/80">
-            Los dibujos de los 90s y 2000s de Cartoon Network, Nickelodeon, Disney XD, Jetix y Fox Kids. Sintonizá un canal
-            con su programación del día o elegí qué ver en la biblioteca.
-          </p>
-          <div className="flex flex-wrap gap-3">
-            <Link href="/programacion" className="chunky inline-flex items-center gap-2 rounded-xl bg-[#ff3ea5] px-5 py-3 font-display text-white transition-transform hover:-translate-y-1">
-              <CalendarClock className="size-5" /> Ver qué pasan ahora
-            </Link>
-            <Link href="/biblioteca" className="chunky inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 font-display text-black transition-transform hover:-translate-y-1">
-              <Library className="size-5" /> Ir a la biblioteca
-            </Link>
-          </div>
-        </div>
-        <div className="chunky rounded-[2rem] bg-[#3a2a1a] p-5">
-          <div className="scanlines relative aspect-video overflow-hidden rounded-[1.5rem] bg-black">
-            <NoSignal title="RetroToons" subtitle={`${shows.length} series · ${channels.length} canales`} />
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="font-display text-2xl text-white">Canales</h2>
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          {channels.map((c) => (
-            <li key={c.id}>
+    <OnAirProvider>
+      <div className="space-y-14">
+        <section className="grid items-center gap-10 pt-2 lg:grid-cols-[1.05fr_1fr]">
+          <div className="space-y-6">
+            <span className="sticker inline-block rounded-md bg-[#ff3ea5] px-2.5 py-0.5 font-mono text-xl uppercase text-white">
+              La tele de la tarde · 90s y 2000s
+            </span>
+            <h1 className="font-display text-5xl leading-[0.95] text-accent [text-shadow:5px_5px_0_#000] sm:text-7xl">
+              Volvé a la tarde después del cole
+            </h1>
+            <p className="max-w-xl text-lg text-white/80 sm:text-xl">
+              Prendé la tele: {channels.length} canales con su programación del día, como en los 2000. O elegí cualquier serie de la
+              biblioteca y mirala cuando quieras. Todo en español latino.
+            </p>
+            <div className="flex flex-wrap gap-3">
               <Link
-                href={`/programacion?canal=${c.id}`}
-                className="chunky flex h-full flex-col gap-2 rounded-xl p-4 transition-transform hover:-translate-y-1"
-                style={{ backgroundColor: c.color, color: c.ink }}
+                href="/programacion"
+                className="chunky inline-flex items-center gap-2 rounded-xl bg-[#ff3ea5] px-6 py-3.5 font-display text-lg text-white transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white"
               >
-                <span className="font-display text-lg leading-tight">{c.name}</span>
-                <span className="font-mono text-lg opacity-80">{c.years}</span>
-                <span className="text-sm opacity-90">{c.description}</span>
+                <CalendarClock className="size-5" /> Ver qué pasan ahora
               </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+              <Link
+                href="/biblioteca"
+                className="chunky inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3.5 font-display text-lg text-black transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+              >
+                <Library className="size-5" /> Ir a la biblioteca
+              </Link>
+            </div>
+            <ul className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-xl text-white/60">
+              <li>★ {channels.length} canales en vivo</li>
+              <li>★ Grilla de 24 hs</li>
+              <li>★ Español latino</li>
+            </ul>
+          </div>
+          <HeroTv />
+        </section>
+
+        <OnAirTicker />
+
+        <ContinueWatching />
+
+        <section className="space-y-5" aria-labelledby="canales">
+          <SectionTitle
+            id="canales"
+            aside={
+              <Link href="/programacion" className="font-bold text-accent hover:underline">
+                Ver la grilla completa →
+              </Link>
+            }
+          >
+            Canales en vivo
+          </SectionTitle>
+          <OnAirChannels />
+        </section>
+
+        {genres.length > 0 && (
+          <section className="space-y-5" aria-labelledby="cadenas">
+            <SectionTitle
+              id="cadenas"
+              aside={
+                <Link href="/biblioteca" className="font-bold text-accent hover:underline">
+                  Ver toda la biblioteca →
+                </Link>
+              }
+            >
+              Explorá la biblioteca
+            </SectionTitle>
+            <ul className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {genres.map((g, i) => {
+                const brand = brandByGenre.get(g);
+                return (
+                  <li key={g}>
+                    <Link
+                      href={`/biblioteca?cadena=${encodeURIComponent(g)}`}
+                      className={`chunky flex h-full min-h-20 items-end rounded-xl p-4 font-display text-lg leading-tight transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent ${
+                        i % 2 ? "hover:rotate-1" : "hover:-rotate-1"
+                      }`}
+                      style={{ backgroundColor: brand?.bg ?? "#2a1a4d", color: brand?.ink ?? "#fdf6e3" }}
+                    >
+                      {g}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+      </div>
+    </OnAirProvider>
   );
 }

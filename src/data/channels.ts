@@ -14,12 +14,13 @@ export const channels: Channel[] = [
     ink: "#ffffff",
     years: "1992 – hoy",
     description: "Los Cartoon Cartoons, Toonami y las noches de Cartoon Network.",
+    lacartoons: ["Cartoon Network", "Hanna Barbera"],
     blocks: [
-      { name: "Madrugada Toon", start: "00:00", end: "06:00", shows: ["coraje", "billy-mandy", "samurai-jack", "dexter", "johnny-bravo", "vaca-pollito", "mike-lu-og", "duck-dodgers"] },
-      { name: "Despertate con Cartoon", start: "06:00", end: "09:00", shows: ["chicas-superpoderosas", "dexter", "ed-edd-eddy", "johnny-bravo", "camp-lazlo", "puffy-amiyumi"] },
+      { name: "Madrugada Toon", start: "00:00", end: "06:00", shows: ["coraje", "billy-mandy", "samurai-jack", "dexter", "johnny-bravo", "vaca-pollito", "mike-lu-og", "duck-dodgers"], lacartoons: ["Los Picapiedras"] },
+      { name: "Despertate con Cartoon", start: "06:00", end: "09:00", shows: ["chicas-superpoderosas", "dexter", "ed-edd-eddy", "johnny-bravo", "camp-lazlo", "puffy-amiyumi"], lacartoons: ["Tom y Jerry", "Looney Tunes", "Scooby-Doo, ¿Dónde estás?"] },
       { name: "Cartoon Cartoons", start: "09:00", end: "13:00", shows: ["dexter", "vaca-pollito", "chicas-superpoderosas", "johnny-bravo", "ed-edd-eddy", "coraje", "kids-next-door", "foster", "mike-lu-og", "gym-partner"] },
-      { name: "Hora del Almuerzo", start: "13:00", end: "16:00", shows: ["kids-next-door", "billy-mandy", "foster", "ed-edd-eddy", "ben-10", "camp-lazlo", "gym-partner", "puffy-amiyumi", "duck-dodgers"] },
-      { name: "Toonami", start: "16:00", end: "19:00", shows: ["dbz", "samurai-jack", "ben-10", "dbz", "jovenes-titanes", "liga-justicia", "megas-xlr"] },
+      { name: "Hora del Almuerzo", start: "13:00", end: "16:00", shows: ["kids-next-door", "billy-mandy", "foster", "ed-edd-eddy", "ben-10", "camp-lazlo", "gym-partner", "puffy-amiyumi", "duck-dodgers"], lacartoons: ["Pokemon"] },
+      { name: "Toonami", start: "16:00", end: "19:00", shows: ["dbz", "samurai-jack", "ben-10", "dbz", "jovenes-titanes", "liga-justicia", "megas-xlr"], lacartoons: ["Dragon Ball", "Dragon Ball GT"] },
       { name: "Viernes de Cartoon", start: "19:00", end: "22:00", shows: ["coraje", "billy-mandy", "chicas-superpoderosas", "foster", "samurai-jack", "jovenes-titanes", "megas-xlr"] },
       { name: "Noche Toon", start: "22:00", end: "24:00", shows: ["coraje", "samurai-jack", "johnny-bravo", "billy-mandy", "liga-justicia"] },
     ],
@@ -32,6 +33,7 @@ export const channels: Channel[] = [
     ink: "#ffffff",
     years: "1979 – hoy",
     description: "Los Nicktoons, el slime verde y SNICK los sábados a la noche.",
+    lacartoons: ["Nickelodeon"],
     blocks: [
       { name: "Nick de Noche", start: "00:00", end: "06:00", shows: ["rocko", "aaahh-monstruos", "hey-arnold", "rugrats", "catdog", "invasor-zim", "ren-stimpy", "castores", "doug"] },
       { name: "Nick Mañanero", start: "06:00", end: "09:00", shows: ["rugrats", "bob-esponja", "thornberrys", "catdog", "doug"] },
@@ -49,11 +51,12 @@ export const channels: Channel[] = [
     ink: "#fde047",
     years: "1990 – 2004",
     description: "Superhéroes, Power Rangers y anime antes de convertirse en Jetix.",
+    lacartoons: ["Fox Kids", "Marvel"],
     blocks: [
       { name: "Fox Kids Nocturno", start: "00:00", end: "06:00", shows: ["x-men", "spider-man", "eek", "power-rangers", "extreme-ghostbusters"] },
       { name: "Fox Kids Club", start: "06:00", end: "10:00", shows: ["eek", "oggy", "power-rangers", "digimon", "beetleborgs"] },
       { name: "Héroes de la Mañana", start: "10:00", end: "14:00", shows: ["x-men", "spider-man", "power-rangers", "eek", "oggy", "tmnt-2003", "beetleborgs"] },
-      { name: "Zona Anime", start: "14:00", end: "17:00", shows: ["digimon", "shaman-king", "digimon"] },
+      { name: "Zona Anime", start: "14:00", end: "17:00", shows: ["digimon", "shaman-king", "digimon"], lacartoons: ["Monster Rancher", "BeyBlade"] },
       { name: "La Hora del Poder", start: "17:00", end: "20:00", shows: ["power-rangers", "x-men", "spider-man", "shaman-king", "tmnt-2003", "extreme-ghostbusters"] },
       { name: "Fox Kids de Noche", start: "20:00", end: "24:00", shows: ["spider-man", "x-men", "digimon", "eek", "tmnt-2003"] },
     ],
@@ -66,13 +69,14 @@ export const channels: Channel[] = [
     ink: "#ffffff",
     years: "2004 – 2009",
     description: "El heredero de Fox Kids: acción, aventura y Jetix Max.",
+    lacartoons: ["Fox Kids", "Marvel", "Otros"],
     blocks: [
-      { name: "Jetix Nocturno", start: "00:00", end: "06:00", shows: ["oggy", "totally-spies", "power-rangers", "witch", "kid-vs-kat"] },
-      { name: "Jetix Mañana", start: "06:00", end: "10:00", shows: ["oggy", "totally-spies", "witch", "digimon", "pucca"] },
-      { name: "Jetix Max", start: "10:00", end: "14:00", shows: ["srmthfg", "power-rangers", "galactik-football", "monster-buster", "shaman-king", "tmnt-2003"] },
+      { name: "Jetix Nocturno", start: "00:00", end: "06:00", shows: ["oggy", "totally-spies", "power-rangers", "witch", "kid-vs-kat"], lacartoons: ["Sonic X", "Monster Rancher", "Action Man: A.T.O.M."] },
+      { name: "Jetix Mañana", start: "06:00", end: "10:00", shows: ["oggy", "totally-spies", "witch", "digimon", "pucca"], lacartoons: ["Sonic X", "BeyBlade"] },
+      { name: "Jetix Max", start: "10:00", end: "14:00", shows: ["srmthfg", "power-rangers", "galactik-football", "monster-buster", "shaman-king", "tmnt-2003"], lacartoons: ["Action Man: A.T.O.M.", "Sonic X"] },
       { name: "Jetix Chicas", start: "14:00", end: "17:00", shows: ["totally-spies", "witch", "totally-spies", "pucca"] },
-      { name: "Hora de Acción", start: "17:00", end: "21:00", shows: ["power-rangers", "srmthfg", "galactik-football", "digimon", "shaman-king", "tmnt-2003", "kid-vs-kat"] },
-      { name: "Jetix de Noche", start: "21:00", end: "24:00", shows: ["monster-buster", "galactik-football", "totally-spies", "oggy", "pucca"] },
+      { name: "Hora de Acción", start: "17:00", end: "21:00", shows: ["power-rangers", "srmthfg", "galactik-football", "digimon", "shaman-king", "tmnt-2003", "kid-vs-kat"], lacartoons: ["BeyBlade", "Action Man: A.T.O.M."] },
+      { name: "Jetix de Noche", start: "21:00", end: "24:00", shows: ["monster-buster", "galactik-football", "totally-spies", "oggy", "pucca"], lacartoons: ["Action Man: A.T.O.M.", "Sonic X", "Monster Rancher"] },
     ],
   },
   {
@@ -83,6 +87,7 @@ export const channels: Channel[] = [
     ink: "#39ff14",
     years: "1998 – hoy",
     description: "De Toon Disney a Disney XD: clásicos animados de Disney.",
+    lacartoons: ["Disney"],
     blocks: [
       { name: "Clásicos de Madrugada", start: "00:00", end: "06:00", shows: ["gargoyles", "timon-pumbaa", "pepper-ann", "recreo", "ducktales", "chip-dale", "darkwing", "goof-troop"] },
       { name: "Disney Mañanero", start: "06:00", end: "09:00", shows: ["timon-pumbaa", "lilo-stitch", "recreo", "ducktales", "goof-troop", "chip-dale"] },
@@ -95,6 +100,11 @@ export const channels: Channel[] = [
 ];
 
 export const channelById = Object.fromEntries(channels.map((c) => [c.id, c])) as Record<ChannelId, Channel>;
+
+/** Número de canal como en la tele ("01", "02"...), según el orden de la lista. */
+export function channelNumber(id: ChannelId): string {
+  return String(channels.findIndex((c) => c.id === id) + 1).padStart(2, "0");
+}
 
 export function isChannelId(value: string | undefined | null): value is ChannelId {
   return !!value && value in channelById;

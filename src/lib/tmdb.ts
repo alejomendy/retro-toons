@@ -45,6 +45,8 @@ async function tmdb<T>(path: string, params: Record<string, string> = {}): Promi
 export interface TmdbProvider {
   name: string;
   logo: string;
+  /** Gratis con publicidad (o gratis sin más), sin suscripción. */
+  free: boolean;
 }
 
 export interface TmdbShow {
@@ -76,6 +78,8 @@ export interface TmdbEpisode {
   originalName: string | null;
 }
 
+type RawProvider = { provider_name: string; logo_path: string };
+
 interface RawTv {
   id: number;
   name: string;
@@ -84,7 +88,7 @@ interface RawTv {
   backdrop_path: string | null;
   seasons: { season_number: number; episode_count: number }[];
   videos?: { results: { key: string; name: string; site: string; type: string; iso_639_1: string }[] };
-  "watch/providers"?: { results: Record<string, { link: string; flatrate?: { provider_name: string; logo_path: string }[] }> };
+  "watch/providers"?: { results: Record<string, { link: string } & Partial<Record<"flatrate" | "ads" | "free", RawProvider[]>>> };
 }
 
 /** Busca la serie en TMDB por título original y año de estreno. */
@@ -125,9 +129,21 @@ export async function getTmdbShow(id: number): Promise<TmdbShow | null> {
     backdrop: raw.backdrop_path ? `${IMG}/w1280${raw.backdrop_path}` : null,
     seasons: raw.seasons.filter((s) => s.season_number > 0).map((s) => ({ number: s.season_number, episodeCount: s.episode_count })),
     videos,
-    providers: (watch?.flatrate ?? []).map((p) => ({ name: p.provider_name, logo: `${IMG}/w92${p.logo_path}` })),
+    providers: providerList(watch),
     providersLink: watch?.link ?? null,
   };
+}
+
+/** Plataformas gratis (con publicidad) primero y después las de suscripción, sin repetir. */
+function providerList(watch?: Partial<Record<"flatrate" | "ads" | "free", RawProvider[]>>): TmdbProvider[] {
+  const out = new Map<string, TmdbProvider>();
+  for (const [kind, free] of [["free", true], ["ads", true], ["flatrate", false]] as const) {
+    for (const p of watch?.[kind] ?? []) {
+      const name = p.provider_name.trim();
+      if (!out.has(name)) out.set(name, { name, logo: `${IMG}/w92${p.logo_path}`, free });
+    }
+  }
+  return [...out.values()];
 }
 
 type RawSeason = {

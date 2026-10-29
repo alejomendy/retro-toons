@@ -10,6 +10,8 @@ export interface Channel {
   ink: string;
   years: string;
   description: string;
+  /** Cadenas ("genre") del catálogo de LACartoons de las que salen las series del canal. */
+  lacartoons: string[];
   /** Bloques del día, en orden. Cubren las 24 hs empezando a las 00:00. */
   blocks: ScheduleBlock[];
 }
@@ -22,6 +24,8 @@ export interface ScheduleBlock {
   end: string;
   /** Series que rotan dentro del bloque. */
   shows: string[];
+  /** Clásicos extra del bloque, por su nombre en el catálogo de LACartoons. */
+  lacartoons?: string[];
   /** Duración de cada espacio en minutos (por defecto 30). */
   slotMinutes?: number;
 }
@@ -31,10 +35,18 @@ export interface Show {
   title: string;
   /** Título original en inglés (para buscar en TMDB/YouTube; no se muestra como título principal). */
   originalTitle: string;
+  /** Nombre en el catálogo de LACartoons cuando no coincide con `title` ni `originalTitle`. */
+  lacartoons?: string;
   /** ID en TMDB. Si falta se busca por título original + año. */
   tmdbId?: number;
   /** Wiki de fans con títulos latinos de episodios (ver lib/fanwiki.ts). */
   fanWiki?: FanWiki;
+  /** Canales OFICIALES de YouTube que suben episodios completos (ver lib/youtube-channels.ts). */
+  youtubeChannels?: string[];
+  /** false si el canal numera los episodios distinto que TMDB: solo se cruza por nombre. */
+  matchByNumber?: boolean;
+  /** false si lo que hay en Pluto TV con ese nombre es otra versión (ej. Tortugas Ninja 2012 ≠ 2003). */
+  pluto?: boolean;
   channels: ChannelId[];
   /** Año de estreno. */
   year: number;
@@ -54,6 +66,8 @@ export interface Show {
 export type VideoSource =
   | { type: "youtube"; id: string }
   | { type: "dailymotion"; id: string }
+  /** Stream HLS (ej. Pluto TV vía /api/hls); pageUrl es la página original para la atribución. */
+  | { type: "hls"; url: string; pageUrl?: string }
   | { type: "file"; url: string };
 
 export interface Episode {
@@ -83,8 +97,11 @@ export interface ShowExtras {
   /** Openings/trailers en YouTube (claves de video). */
   videos: { key: string; name: string; type: string }[];
   /** Plataformas donde verla legalmente en la región configurada. */
-  providers: { name: string; logo: string }[];
+  /** `free`: gratis con publicidad, sin suscripción. */
+  providers: { name: string; logo: string; free: boolean }[];
   providersLink: string | null;
+  /** Gratis y legal (sin embeber), ej. Pluto TV. */
+  free: FreeOption[];
   wikipediaUrl: string | null;
   /** Wikis de las que salieron títulos de episodios (para la atribución). */
   credits: { name: string; url: string }[];
@@ -97,6 +114,21 @@ export interface Slot {
   block: string;
   show: Show;
   episode: Episode;
+  /** Serie de otro canal que completa la grilla (el canal no tiene suficientes disponibles). */
+  guest?: boolean;
+}
+
+/** Dónde ver la serie gratis y legal (sin embeber), ej. un canal de Pluto TV. */
+export interface FreeOption {
+  platform: string;
+  /** "canal" en vivo o "serie" a demanda. */
+  kind: "canal" | "serie";
+  name: string;
+  url: string;
+  /** Lo que está pasando ahora en el canal. */
+  now: { title: string; until: string } | null;
+  /** Stream HLS del canal en vivo para verlo en la página (vía /api/hls). */
+  stream?: string;
 }
 
 /** Wiki de fans en Fandom (español) con una lista de episodios. */

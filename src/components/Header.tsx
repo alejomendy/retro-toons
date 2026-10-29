@@ -1,10 +1,6 @@
 import Link from "next/link";
-import { CalendarClock, Library, Tv } from "lucide-react";
-
-const links = [
-  { href: "/programacion", label: "Programación", icon: CalendarClock },
-  { href: "/biblioteca", label: "Biblioteca", icon: Library },
-];
+import { Tv } from "lucide-react";
+import NavLinks from "./NavLinks";
 
 export default function Header() {
   return (
@@ -16,19 +12,10 @@ export default function Header() {
           </span>
           Retro<span className="text-[#ff3ea5]">Toons</span>
         </Link>
-        <nav className="flex gap-2">
-          {links.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="chunky flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 font-bold transition-transform hover:-translate-y-0.5"
-            >
-              <Icon className="size-4" />
-              {label}
-            </Link>
-          ))}
-        </nav>
+        <NavLinks />
       </div>
+      {/* Franja a cuadros: el borde de los bumpers de la tele de los 2000 */}
+      <div className="checker h-2 bg-[#ff3ea5]" aria-hidden />
     </header>
   );
 }

@@ -68,6 +68,41 @@ body {
 }
 .blink { animation: blink 1.2s steps(1) infinite; }
 
+/* Texto en pantalla de tele de tubo (número de canal, volumen) */
+.osd {
+  color: #7cff6b;
+  text-shadow: 0 0 6px rgb(124 255 107 / 0.8), 2px 2px 0 #000;
+  letter-spacing: 0.05em;
+}
+
+/* Etiqueta tipo calcomanía, levemente torcida */
+.sticker {
+  border: 3px solid #000;
+  box-shadow: 3px 3px 0 #000;
+  transform: rotate(-3deg);
+}
+
+/* Separador a cuadros, como los bumpers de los 2000 */
+.checker {
+  background-image: conic-gradient(#000 25%, transparent 0 50%, #000 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+
+/* Cinta de "ahora en la tele" que se desplaza */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee { animation: marquee 40s linear infinite; }
+.marquee:hover { animation-play-state: paused; }
+
+/* El número de canal aparece al cambiar y después se va */
+@keyframes osd-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.osd-flash { animation: osd-fade 3.5s ease-out forwards; }
+
 @media (prefers-reduced-motion: reduce) {
-  .static-noise, .blink { animation: none; }
+  .static-noise, .blink, .marquee, .osd-flash { animation: none; }
 }
