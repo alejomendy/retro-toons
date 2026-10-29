@@ -15,9 +15,13 @@ function replaceOnce(from, to, what) {
 // 1) Chromium con banderas de bajo consumo de memoria.
 replaceOnce(
   "args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],",
-  "args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage', '--disable-gpu', '--no-zygote', '--single-process', '--disable-extensions', '--mute-audio', '--js-flags=--max-old-space-size=128'],",
+  // Sin --single-process: con eso Chromium se cae al cerrar una página y el addon queda con un navegador muerto.
+  "args: ['--no-sandbox', '--disable-blink-features=AutomationControlled', '--disable-dev-shm-usage', '--disable-gpu', '--disable-extensions', '--mute-audio', '--js-flags=--max-old-space-size=128'],",
   "argumentos de chromium.launch",
 );
+
+// Si Chromium se cerró (falta de memoria, crash), se vuelve a abrir en vez de reutilizar el muerto.
+replaceOnce("    if (!browserInstance) {", "    if (!browserInstance || !browserInstance.isConnected()) {", "chequeo de browserInstance");
 
 // 2) Una sola página de Chromium a la vez: varios episodios pedidos juntos hacían que el
 //    proceso pasara los 512 MB y Render lo reiniciara. Las demás búsquedas esperan su turno.
