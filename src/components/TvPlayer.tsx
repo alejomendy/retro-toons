@@ -218,7 +218,7 @@ function HlsVideo({ url, start, pageUrl }: { url: string; start: number; pageUrl
   );
 }
 
-export function NoSignal({ title, subtitle, fallback }: { title: string; subtitle?: string; fallback?: Props["fallback"] }) {
+export function NoSignal({ title, subtitle, fallback, hint = "SIN SEÑAL · Este episodio todavía no está disponible" }: { title: string; subtitle?: string; fallback?: Props["fallback"]; hint?: string | null }) {
   return (
     <div className="absolute inset-0">
       <div className="static-noise absolute inset-0 opacity-60" />
@@ -239,7 +239,7 @@ export function NoSignal({ title, subtitle, fallback }: { title: string; subtitl
               </a>
             </>
           ) : (
-            <p className="mt-2 font-mono text-lg text-white/60">SIN SEÑAL · Este episodio todavía no está disponible</p>
+            hint && <p className="mt-2 font-mono text-lg text-white/60">{hint}</p>
           )}
         </div>
       </div>

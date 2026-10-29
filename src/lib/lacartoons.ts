@@ -207,7 +207,11 @@ export async function fetchStreams(episodeId: string): Promise<LcStream[]> {
   // El addon busca las fuentes en el momento: con episodios sin video puede tardar más de 20 s.
   const data = await addonGet(`/stream/series/${encodeURIComponent(episodeId)}.json`, 45000);
   if (!isObj(data) || !Array.isArray(data.streams)) throw new LcError("MALFORMED_DATA");
-  return data.streams.map(parseStream).filter((s): s is LcStream => !!s);
+  const streams = data.streams.map(parseStream).filter((s): s is LcStream => !!s);
+  // Primero las que el navegador puede reproducir tal cual (ej. el proxy del addon). Las directas de ok.ru
+  // piden encabezados y quedan firmadas para la IP del servidor que las pidió: con el addon en la nube suelen fallar.
+  const needsHelp = (s: LcStream) => (s.notWebReady || s.requiresHeaders ? 1 : 0);
+  return streams.sort((a, b) => needsHelp(a) - needsHelp(b));
 }
 
 /** Cadenas/categorías reales que declara el manifiesto del addon. */

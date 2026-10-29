@@ -4,6 +4,9 @@ import { parseDateParam } from "@/lib/catalog";
 import { lcErrorResponse } from "@/lib/lacartoons";
 import { getLcSchedule } from "@/lib/lacartoons-schedule";
 
+// El addon en el plan gratis de Render tarda hasta ~50 s en despertar.
+export const maxDuration = 60;
+
 /**
  * GET /api/programacion?canal=cartoon-network&fecha=2026-10-29
  * Grilla del día con series y episodios de LACartoons.

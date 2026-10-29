@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchSeries, lcErrorResponse } from "@/lib/lacartoons";
 
 export const runtime = "nodejs";
+// El addon en el plan gratis de Render tarda hasta ~50 s en despertar.
+export const maxDuration = 60;
 
 type RouteContext = {
   params: Promise<{ id: string }>;

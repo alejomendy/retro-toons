@@ -78,7 +78,7 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
             <TvPlayer
               title={error ? "Sin señal" : "Sintonizando..."}
               subtitle={channel.name}
-              overlay={error ? <NoSignal title="Sin señal" subtitle={error} /> : <Tuning channelName={channel.name} />}
+              overlay={error ? <NoSignal title="Sin señal" subtitle={error} hint={null} /> : <Tuning channelName={channel.name} />}
               channel={tvChannel(channelId)}
               cinema={cinema}
               onCinemaChange={setCinema}
