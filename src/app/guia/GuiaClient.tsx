@@ -6,6 +6,7 @@ import { channelNumber, channels } from "@/data/channels";
 import { formatTime, minutesNow } from "@/lib/schedule";
 import { episodeLabel, watchHref, type LcSlot } from "@/lib/lacartoons-types";
 import { prefetchStreams } from "@/lib/prefetch-streams";
+import { loadGrids, toDateParam } from "@/lib/grids";
 import type { ChannelId } from "@/lib/types";
 
 /** Ancho de un minuto en la grilla (px): un espacio de 30 min mide 150 px. */
@@ -14,10 +15,6 @@ const DAY_MINUTES = 24 * 60;
 const WEEKDAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 
 type Grids = Partial<Record<ChannelId, LcSlot[] | "error">>;
-
-function toDateParam(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 
 /**
  * Guía de todos los canales a la vez, como la del cable: canales en filas, horas en columnas.
@@ -46,22 +43,21 @@ export default function GuiaClient() {
       })
     : [];
 
-  // Las grillas de los seis canales para el día elegido (en caché del servidor: responden rápido).
+  // Las grillas de los seis canales para el día elegido, en un solo pedido (en caché de la CDN).
   useEffect(() => {
     if (!day) return;
-    const controller = new AbortController();
+    let cancelled = false;
     setGrids({ day, data: {} });
-    for (const c of channels) {
-      fetch(`/api/programacion?canal=${c.id}&fecha=${day}`, { signal: controller.signal })
-        .then((r) => r.json())
-        .then((data: { success?: boolean; slots?: LcSlot[] }) =>
-          setGrids((g) => (g.day === day ? { day, data: { ...g.data, [c.id]: data.success && data.slots ? data.slots : "error" } } : g)),
-        )
-        .catch(() => {
-          if (!controller.signal.aborted) setGrids((g) => (g.day === day ? { day, data: { ...g.data, [c.id]: "error" } } : g));
-        });
-    }
-    return () => controller.abort();
+    loadGrids(day)
+      .then((all) => {
+        if (!cancelled) setGrids({ day, data: Object.fromEntries(channels.map((c) => [c.id, all[c.id] ?? "error"])) });
+      })
+      .catch(() => {
+        if (!cancelled) setGrids({ day, data: Object.fromEntries(channels.map((c) => [c.id, "error"])) });
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [day]);
 
   // Al abrir (o cambiar de día) se muestra desde un rato antes de ahora; los otros días, desde la tarde.

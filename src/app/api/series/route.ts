@@ -21,7 +21,8 @@ export async function GET(request: NextRequest) {
     // Primero el catálogo en caché; si todavía no se pudo llenar, se le pregunta directo al addon.
     const found = await searchCachedCatalog({ search: query, genre, skip }).catch(() => fetchCatalog({ search: query, genre, skip }));
     const results = await withArtworkAll(found);
-    return NextResponse.json({ success: true, results });
+    // La CDN guarda las búsquedas un día (el catálogo casi no cambia).
+    return NextResponse.json({ success: true, results }, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
   } catch (error) {
     return lcErrorResponse(error, "búsqueda");
   }

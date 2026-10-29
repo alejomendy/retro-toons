@@ -9,12 +9,13 @@ import { channelById, channelNumber, channels } from "@/data/channels";
 import PageHeader from "@/components/PageHeader";
 import { useTheaterMode } from "@/lib/use-theater";
 import { prefetchStreams } from "@/lib/prefetch-streams";
+import { forgetGrids, loadGrids, toDateParam } from "@/lib/grids";
 import { useOnAir } from "@/lib/use-on-air";
 import { getLastChannel, recordChannelVisit, recordFinishedEpisode, setLastChannel } from "@/lib/user-library";
 import TvPlayer, { NoSignal } from "@/components/TvPlayer";
-import VideoPlayer from "@/components/VideoPlayer";
+import VideoPlayer from "@/components/LazyVideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
-import { episodeLabel, lcErrorMessages, seriesHref, watchHref, type LcErrorCode, type LcSlot } from "@/lib/lacartoons-types";
+import { episodeLabel, lcErrorMessages, seriesHref, watchHref, type LcSlot } from "@/lib/lacartoons-types";
 import type { ChannelId } from "@/lib/types";
 
 type Grid = { key: string; slots: LcSlot[] } | { key: string; error: string };
@@ -37,22 +38,22 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
   // La grilla la arma el servidor con series y episodios reales de LACartoons.
   useEffect(() => {
     if (!now) return;
-    const controller = new AbortController();
-    fetch(`/api/programacion?canal=${channelId}&fecha=${toDateParam(now)}`, { signal: controller.signal })
-      .then(async (r) => {
-        const data: unknown = await r.json().catch(() => null);
-        const body = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
-        if (r.ok && body.success === true && Array.isArray(body.slots)) {
-          setGrid({ key: scheduleKey, slots: body.slots as LcSlot[] });
-        } else {
-          const code = typeof body.code === "string" ? (body.code as LcErrorCode) : "ADDON_BAD_RESPONSE";
-          setGrid({ key: scheduleKey, error: typeof body.error === "string" ? body.error : lcErrorMessages[code] });
-        }
+    // Las seis grillas vienen juntas (y compartidas con el resto de la página): cambiar de canal no espera a nadie.
+    let cancelled = false;
+    const fecha = toDateParam(now);
+    if (retry > 0) forgetGrids(fecha);
+    loadGrids(fecha)
+      .then((all) => {
+        if (cancelled) return;
+        const slots = all[channelId];
+        setGrid(slots ? { key: scheduleKey, slots } : { key: scheduleKey, error: lcErrorMessages.ADDON_BAD_RESPONSE });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setGrid({ key: scheduleKey, error: lcErrorMessages.ADDON_UNREACHABLE });
+        if (!cancelled) setGrid({ key: scheduleKey, error: lcErrorMessages.ADDON_UNREACHABLE });
       });
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+    };
   }, [scheduleKey, retry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loaded = grid?.key === scheduleKey ? grid : null;
@@ -301,10 +302,6 @@ function ChannelBanner({ channelId }: { channelId: ChannelId }) {
       <p className="w-full text-sm opacity-90 sm:w-auto sm:max-w-sm">{c.description}</p>
     </div>
   );
-}
-
-function toDateParam(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** Segundos transcurridos del espacio, con la hora exacta de ahora (no la del último tic del reloj). */
@@ -595,15 +592,18 @@ function WeekGuide({ channelId, now, todaySlots, current, loading }: { channelId
 
   useEffect(() => {
     if (isToday || !day) return;
-    const controller = new AbortController();
+    let cancelled = false;
     setOther({ key: otherKey, slots: null });
-    fetch(`/api/programacion?canal=${channelId}&fecha=${day}`, { signal: controller.signal })
-      .then((r) => r.json())
-      .then((data: { success?: boolean; slots?: LcSlot[] }) => setOther({ key: otherKey, slots: data.success && data.slots ? data.slots : [] }))
+    loadGrids(day)
+      .then((all) => {
+        if (!cancelled) setOther({ key: otherKey, slots: all[channelId] ?? [] });
+      })
       .catch(() => {
-        if (!controller.signal.aborted) setOther({ key: otherKey, slots: [] });
+        if (!cancelled) setOther({ key: otherKey, slots: [] });
       });
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+    };
   }, [channelId, day, isToday, otherKey]);
 
   const otherReady = other.key === otherKey && other.slots !== null;

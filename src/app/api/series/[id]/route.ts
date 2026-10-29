@@ -15,7 +15,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
     const series = await withArtwork(await fetchSeries(id));
-    return NextResponse.json({ success: true, series });
+    return NextResponse.json({ success: true, series }, { headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=604800" } });
   } catch (error) {
     return lcErrorResponse(error, "detalles");
   }

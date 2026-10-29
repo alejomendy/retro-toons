@@ -14,7 +14,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     try {
         const { id } = await context.params;
         const streams = await fetchStreamsCached(id);
-        return NextResponse.json({ success: true, streams });
+        // Con fuentes, la CDN las sirve media hora (el servidor ya las guarda 3 h); vacías, no se guardan.
+        return NextResponse.json({ success: true, streams }, { headers: { "Cache-Control": streams.length > 0 ? "public, s-maxage=1800, stale-while-revalidate=1800" : "no-store" } });
     } catch (error) {
         return lcErrorResponse(error, "streams");
     }

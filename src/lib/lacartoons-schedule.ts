@@ -26,6 +26,8 @@ import type { ChannelId, Show, VideoSource } from "./types";
 const MIN_CHANNEL_SERIES = 6;
 /** Mínimo de series propias de un bloque antes de sumarle las del resto del canal. */
 const MIN_BLOCK_SERIES = 4;
+/** Series que se piden al addon a la vez al armar una grilla. */
+const LOAD_CONCURRENCY = 4;
 /** Prefijo de las series que no están en LACartoons y salen de otra fuente legal. */
 const EXTERNAL = "ext:";
 /** Duración mínima (min) de un episodio externo para ocupar un espacio de la grilla. */
@@ -124,7 +126,44 @@ function weekNumber(date: Date): number {
   return Math.floor((dayNumber(date) + 3) / 7);
 }
 
+/** Pide las series de a pocas (el addon gratis tiene 0,1 CPU) y reintenta una vez las que fallan. */
+async function loadSeriesBatch(ids: string[]): Promise<{ series: (LcSeries | null)[]; failed: number }> {
+  const out: (LcSeries | null)[] = new Array(ids.length).fill(null);
+  let failed = 0;
+  let next = 0;
+  const worker = async () => {
+    while (next < ids.length) {
+      const i = next++;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          out[i] = await cachedSeries(ids[i]);
+          break;
+        } catch (e) {
+          // Una serie que no existe no es una falla del addon: no vale la pena reintentarla.
+          if (e instanceof LcError && (e.code === "SERIES_NOT_FOUND" || e.code === "INVALID_ID")) break;
+          if (attempt === 1) failed++;
+        }
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(LOAD_CONCURRENCY, ids.length) }, worker));
+  return { series: out, failed };
+}
+
+/** La grilla salió incompleta porque el addon no respondió: se muestra, pero no se guarda en caché. */
+class DegradedSchedule extends Error {
+  constructor(readonly slots: LcSlot[]) {
+    super("Grilla incompleta");
+  }
+}
+
 export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<LcSlot[]> {
+  const { slots, failed } = await buildLcSchedule(channelId, date);
+  if (failed > 0) throw new DegradedSchedule(slots);
+  return slots;
+}
+
+async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slots: LcSlot[]; failed: number }> {
   const channel = channelById[channelId];
   const day = dayNumber(date);
   const week = weekNumber(date);
@@ -155,15 +194,15 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
   // Solo sirven las que tienen episodios que se puedan reproducir.
   const loaded = new Map<string, LcSeries>();
   const unplayable = new Set<string>();
+  let failed = 0;
   const load = async (ids: string[]) => {
-    const metas = await Promise.all(ids.map((id) => cachedSeries(id).catch(() => null)));
-    await Promise.all(
-      metas.map(async (s) => {
-        if (!s || s.videos.length === 0) return;
-        if (isPlayable(s)) loaded.set(s.id, s);
-        else unplayable.add(s.id);
-      }),
-    );
+    const result = await loadSeriesBatch(ids);
+    failed += result.failed;
+    for (const s of result.series) {
+      if (!s || s.videos.length === 0) continue;
+      if (isPlayable(s)) loaded.set(s.id, s);
+      else unplayable.add(s.id);
+    }
   };
   await load(unique(blockKeys.flat()).filter((k) => !k.startsWith(EXTERNAL)));
   // Las icónicas que LACartoons tiene pero sin video (ej. alojadas en hosts que el addon no extrae)
@@ -266,7 +305,7 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
     }),
   );
 
-  return slots;
+  return { slots, failed };
 }
 
 function externalUrl(source?: VideoSource): string | undefined {
@@ -348,22 +387,42 @@ export async function searchCachedCatalog({ search, genre, skip = 0 }: { search?
 }
 
 /** Cadenas del catálogo: las del manifiesto del addon o, si no responde, las del catálogo en caché. */
+/** Cadenas del catálogo, en caché un día: así el inicio y la biblioteca no esperan al addon en cada visita. */
+const cachedGenres = unstable_cache(
+  async (): Promise<string[]> => {
+    const fromManifest = await fetchGenres();
+    const genres = fromManifest.length > 0 ? fromManifest : unique((await fullCatalog()).flatMap((s) => s.genres));
+    // Vacío = el addon no respondió: se lanza para que no quede guardado.
+    if (genres.length === 0) throw new LcError("ADDON_UNREACHABLE");
+    return genres;
+  },
+  ["lacartoons-genres"],
+  { revalidate: CACHE_SECONDS },
+);
+
 export async function getGenres(): Promise<string[]> {
-  const fromManifest = await fetchGenres();
-  if (fromManifest.length > 0) return fromManifest;
-  const all = await fullCatalog().catch(() => []);
-  return unique(all.flatMap((s) => s.genres));
+  return cachedGenres().catch((): string[] => []);
 }
 
 /**
  * Grilla en caché por canal y día. Es determinística, así que se guarda hasta que cambie la lista
  * de series con video (data/playable.json se actualiza cada semana).
  */
-export const getCachedSchedule = unstable_cache(
+const cachedSchedule = unstable_cache(
   async (channelId: ChannelId, fecha: string) => {
     const [y, m, d] = fecha.split("-").map(Number);
     return getLcSchedule(channelId, new Date(y, m - 1, d));
   },
-  ["lacartoons-schedule-v2", String(playableList.checkedAt ?? "sin-lista")],
+  ["lacartoons-schedule-v3", String(playableList.checkedAt ?? "sin-lista")],
   { revalidate: 7 * 24 * 60 * 60 },
 );
+
+/** Grilla del día: completa, en caché por una semana; incompleta (addon caído o lento), sin caché. */
+export async function getCachedSchedule(channelId: ChannelId, fecha: string): Promise<{ slots: LcSlot[]; complete: boolean }> {
+  try {
+    return { slots: await cachedSchedule(channelId, fecha), complete: true };
+  } catch (e) {
+    if (e instanceof DegradedSchedule) return { slots: e.slots, complete: false };
+    throw e;
+  }
+}

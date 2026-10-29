@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, ListVideo, Minimize2, Play, X } from "lucide-react";
-import VideoPlayer from "@/components/VideoPlayer";
+import VideoPlayer from "@/components/LazyVideoPlayer";
 import EpisodeBrowser from "@/components/series/EpisodeBrowser";
 import FavoriteButton from "@/components/series/FavoriteButton";
 import { episodeLabel, seriesHref, watchHref, type LcEpisode } from "@/lib/lacartoons-types";

@@ -8,14 +8,15 @@ import SurpriseButton from "@/components/series/SurpriseButton";
 import { SectionTitle } from "@/components/PageHeader";
 import { HeroTv, OnAirChannels, OnAirTicker } from "./HomeLive";
 
-export const dynamic = "force-dynamic";
+// Página estática que se renueva cada hora: la CDN la sirve al instante (lo que está al aire se carga en el navegador).
+export const revalidate = 3600;
 
 /** Colores de marca para las cadenas que coinciden con un canal. */
 const brandByGenre = new Map(channels.map((c) => [c.name, { bg: c.color, ink: c.ink }]));
 
 export default async function Home() {
   // Cadenas reales del catálogo (si el addon no responde, la sección no se muestra).
-  const genres = await getGenres();
+  const genres = await getGenres().catch((): string[] => []);
 
   return (
     <OnAirProvider>

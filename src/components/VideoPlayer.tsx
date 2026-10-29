@@ -6,6 +6,7 @@ import "video.js/dist/video-js.css";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { lcErrorMessages, type LcErrorCode, type LcStream } from "@/lib/lacartoons-types";
 import { getSavedVolume, saveVolume } from "@/lib/user-library";
+import { forgetStreams, getStreams } from "@/lib/prefetch-streams";
 
 type VideoPlayerProps = {
     episodeId: string;
@@ -252,23 +253,23 @@ export default function VideoPlayer({
             setSelectedStream(null);
 
             try {
-                const request = () =>
-                    fetch(`/api/series/${encodeURIComponent(episodeId)}/streams`, {
-                        cache: "no-store",
-                        signal: controller.signal,
-                    });
+                // Si ya se pidieron de antemano (prefetch), se reusa esa misma respuesta.
+                const request = async () => {
+                    const res = await getStreams(episodeId);
+                    if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+                    return res;
+                };
 
-                let response = await request();
-                let data: unknown = await response.json().catch(() => null);
+                let { status, data } = await request();
                 // El addon (plan gratis) a veces tarda de más cuando está ocupado: un reintento suele alcanzar.
-                if (response.status === 502 && (data as { code?: string } | null)?.code === "ADDON_UNREACHABLE") {
+                if (status === 502 && (data as { code?: string } | null)?.code === "ADDON_UNREACHABLE") {
                     await new Promise((resolve) => setTimeout(resolve, 1500));
-                    response = await request();
-                    data = await response.json().catch(() => null);
+                    forgetStreams(episodeId);
+                    ({ status, data } = await request());
                 }
                 const body = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
 
-                if (!response.ok || body.success !== true) {
+                if (status !== 200 || body.success !== true) {
                     const code = typeof body.code === "string" ? (body.code as LcErrorCode) : undefined;
                     throw new Error(
                         typeof body.error === "string"
