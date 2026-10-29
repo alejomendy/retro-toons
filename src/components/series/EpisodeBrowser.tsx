@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Play } from "lucide-react";
 import { episodeLabel, groupBySeason, watchHref, type LcEpisode } from "@/lib/lacartoons-types";
 import { useContinueWatching } from "@/lib/user-library";
+import { prefetchStreams } from "@/lib/prefetch-streams";
 
 /** Selector de temporada + lista de episodios. `currentId` marca el que se está viendo. */
 export default function EpisodeBrowser({
@@ -59,6 +60,9 @@ export default function EpisodeBrowser({
             <li key={e.id}>
               <Link
                 href={watchHref(seriesId, e.id)}
+                // Al pasar el mouse (o el foco) se piden las fuentes: al hacer clic ya están listas.
+                onMouseEnter={() => prefetchStreams(e.id)}
+                onFocus={() => prefetchStreams(e.id)}
                 aria-current={active ? "true" : undefined}
                 scroll={variant === "grid"}
                 className={

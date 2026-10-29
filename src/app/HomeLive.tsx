@@ -8,6 +8,7 @@ import { channelNumber } from "@/data/channels";
 import { formatTime } from "@/lib/schedule";
 import { episodeLabel } from "@/lib/lacartoons-types";
 import { useOnAir, type OnAir } from "@/lib/use-on-air";
+import { getLastChannel } from "@/lib/user-library";
 
 /** Cada cuánto la tele del inicio cambia sola de canal (hasta que el usuario elige uno). */
 const ZAP_MS = 7000;
@@ -17,6 +18,14 @@ export function HeroTv() {
   const onAir = useOnAir();
   const [index, setIndex] = useState(0);
   const [manual, setManual] = useState(false);
+  // La tele del inicio se prende en el último canal que miraste.
+  useEffect(() => {
+    const last = getLastChannel();
+    const i = onAir.findIndex((o) => o.channel.id === last);
+    if (i >= 0) setIndex(i);
+    // Solo al montar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (manual) return;
@@ -179,11 +188,11 @@ export function OnAirChannels() {
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 {status === "loading" ? (
-                  <p className="flex items-center gap-2 font-mono text-lg text-white/60">
+                  <p className="flex items-center gap-2 font-mono text-lg text-white/65">
                     <Loader2 className="size-4 animate-spin" /> Sintonizando…
                   </p>
                 ) : status === "error" || !current ? (
-                  <p className="font-mono text-lg text-white/60">Sin señal por ahora</p>
+                  <p className="font-mono text-lg text-white/65">Sin señal por ahora</p>
                 ) : (
                   <>
                     <p className="flex items-center gap-1.5 font-mono text-lg leading-none text-red-400">
@@ -192,7 +201,7 @@ export function OnAirChannels() {
                     <p className="line-clamp-2 font-bold leading-tight text-white">{current.series.name}</p>
                     <p className="truncate text-sm text-white/65">{current.episode.title}</p>
                     {next && (
-                      <p className="truncate pt-1 text-xs text-white/50">
+                      <p className="truncate pt-1 text-xs text-white/65">
                         <span className="font-mono text-base text-accent">{formatTime(next.start)}</span> {next.series.name}
                       </p>
                     )}

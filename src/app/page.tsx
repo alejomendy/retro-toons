@@ -4,6 +4,7 @@ import { channels } from "@/data/channels";
 import { getGenres } from "@/lib/lacartoons-schedule";
 import { OnAirProvider } from "@/lib/use-on-air";
 import ContinueWatching from "@/components/series/ContinueWatching";
+import SurpriseButton from "@/components/series/SurpriseButton";
 import { SectionTitle } from "@/components/PageHeader";
 import { HeroTv, OnAirChannels, OnAirTicker } from "./HomeLive";
 
@@ -44,8 +45,9 @@ export default async function Home() {
               >
                 <Library className="size-5" /> Ir a la biblioteca
               </Link>
+              <SurpriseButton className="px-6 py-3.5 text-lg" />
             </div>
-            <ul className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-xl text-white/60">
+            <ul className="flex flex-wrap gap-x-5 gap-y-1 font-mono text-xl text-white/65">
               <li>★ {channels.length} canales en vivo</li>
               <li>★ Grilla de 24 hs</li>
               <li>★ Español latino</li>

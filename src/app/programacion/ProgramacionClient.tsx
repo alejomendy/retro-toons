@@ -10,6 +10,7 @@ import PageHeader from "@/components/PageHeader";
 import { useTheaterMode } from "@/lib/use-theater";
 import { prefetchStreams } from "@/lib/prefetch-streams";
 import { useOnAir } from "@/lib/use-on-air";
+import { getLastChannel, recordChannelVisit, recordFinishedEpisode, setLastChannel } from "@/lib/user-library";
 import TvPlayer, { NoSignal } from "@/components/TvPlayer";
 import VideoPlayer from "@/components/VideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
@@ -18,7 +19,7 @@ import type { ChannelId } from "@/lib/types";
 
 type Grid = { key: string; slots: LcSlot[] } | { key: string; error: string };
 
-export default function ProgramacionClient({ channelId }: { channelId: ChannelId }) {
+export default function ProgramacionClient({ channelId, explicit }: { channelId: ChannelId; explicit: boolean }) {
   const channel = channelById[channelId];
   // La hora se calcula en el cliente para usar la zona horaria del visitante.
   const [now, setNow] = useState<Date | null>(null);
@@ -81,16 +82,62 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
   // El modo cine se guarda acá para que no se apague cuando cambia el programa.
   const [cinema, setCinema] = useTheaterMode();
   const remote = useRemoteControl(channelId);
+  const router = useRouter();
+  // Modo «tele de verdad»: sin canal en la URL, se prende en el último que miraste.
+  useEffect(() => {
+    if (explicit) return;
+    const last = getLastChannel();
+    if (last && last !== channelId && channels.some((c) => c.id === last)) {
+      router.replace(`/programacion?canal=${last}`, { scroll: false });
+    }
+    // Solo al entrar a la página.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Se recuerda el canal y cuenta para los logros de zapping.
+  useEffect(() => {
+    setLastChannel(channelId);
+    recordChannelVisit(channelId, channels.length);
+  }, [channelId]);
+  // Con el control remoto lo más probable es ir al canal de al lado: se dejan listas sus fuentes.
+  const onAir = useOnAir();
+  const neighborIds = (() => {
+    const i = channels.findIndex((c) => c.id === channelId);
+    return [channels[(i + 1) % channels.length].id, channels[(i - 1 + channels.length) % channels.length].id];
+  })();
+  const neighborEpisodes = onAir
+    .filter((o) => neighborIds.includes(o.channel.id) && o.current && !o.current.external)
+    .map((o) => o.current!.episode.id)
+    .join(",");
+  useEffect(() => {
+    if (!neighborEpisodes) return;
+    // Un rato después de sintonizar, para no competir con la carga del canal actual.
+    const id = window.setTimeout(() => neighborEpisodes.split(",").forEach(prefetchStreams), 8000);
+    return () => window.clearTimeout(id);
+  }, [neighborEpisodes]);
 
   return (
     <div className="space-y-6">
-      <PageHeader kicker={`Estás viendo · CH ${channelNumber(channelId)}`} title="Programación del día" kickerColor={channel.color} kickerInk={channel.ink}>
+      <PageHeader
+        kicker={`Estás viendo · CH ${channelNumber(channelId)}`}
+        title="Programación del día"
+        kickerColor={channel.color}
+        kickerInk={channel.ink}
+        aside={
+          <Link href="/guia" className="font-bold text-accent hover:underline">
+            Ver la guía de todos los canales →
+          </Link>
+        }
+      >
         Elegí un canal y sintonizá lo que está pasando ahora, como en la tele de antes. Todo en español latino.
       </PageHeader>
 
       <ChannelTabs active={channelId} />
 
       <ChannelBanner channelId={channelId} />
+      {/* Para lectores de pantalla: anuncia el canal al cambiar con el control remoto. */}
+      <p className="sr-only" aria-live="polite">
+        Sintonizaste el canal {channelNumber(channelId)}, {channel.name}.
+      </p>
 
       {/* En modo cine la tele toma todo el ancho y la grilla pasa abajo (mismo árbol: el video no se corta). */}
       <div className={cinema ? "grid gap-6" : "grid gap-6 lg:grid-cols-[1fr_360px]"}>
@@ -193,7 +240,7 @@ function NowNext({ current, upcoming, now }: { current: LcSlot; upcoming: LcSlot
       </div>
       {upcoming.length > 0 && (
         <div className="min-w-0">
-          <p className="font-mono text-lg text-white/60">A CONTINUACIÓN</p>
+          <p className="font-mono text-lg text-white/65">A CONTINUACIÓN</p>
           <ul className="space-y-1">
             {upcoming.map((s) => (
               <li key={s.start} className="flex gap-2 text-sm">
@@ -325,8 +372,9 @@ function LiveTv({
       } else {
         setEndedKey(slotKey);
       }
+      recordFinishedEpisode(slot.series.id, slot.series.name);
     },
-    [episode.id, pick, reserve.length, slot.end, slotKey],
+    [episode.id, pick, reserve.length, slot.end, slot.series.id, slot.series.name, slotKey],
   );
 
   // Fuentes externas (iframe de YouTube, Pluto TV): no avisan cuándo terminan, se usa la duración del episodio.
@@ -499,7 +547,7 @@ function Bumper({ channelId, upcoming }: { channelId: ChannelId; upcoming: LcSlo
         )}
         {later.length > 0 && (
           <ul className="hidden w-full max-w-md space-y-0.5 rounded-lg bg-black/45 px-3 py-1.5 text-left text-sm text-white sm:block">
-            <li className="font-mono text-base leading-none text-white/60">MÁS TARDE</li>
+            <li className="font-mono text-base leading-none text-white/65">MÁS TARDE</li>
             {later.map((s) => (
               <li key={s.start} className="truncate">
                 <span className="mr-2 font-mono text-base text-accent">{formatTime(s.start)}</span>
@@ -510,7 +558,7 @@ function Bumper({ channelId, upcoming }: { channelId: ChannelId; upcoming: LcSlo
         )}
         {other?.current && (
           <p key={other.channel.id} className="lower-third hidden max-w-md items-center gap-2 truncate rounded-lg bg-black/60 px-3 py-1 text-sm text-white sm:flex">
-            <span className="shrink-0 font-mono text-base text-white/60">AHORA EN</span>
+            <span className="shrink-0 font-mono text-base text-white/65">AHORA EN</span>
             <span className="shrink-0 rounded border-2 border-black px-1.5 font-display text-xs" style={{ backgroundColor: other.channel.color, color: other.channel.ink }}>
               {other.channel.name}
             </span>
@@ -665,7 +713,7 @@ function ScheduleList({
                       </span>
                     )}
                   </span>
-                  <span className="block truncate text-sm text-white/60">
+                  <span className="block truncate text-sm text-white/65">
                     {episodeLabel(s.episode)} · {s.episode.title}
                   </span>
                 </span>
@@ -683,7 +731,12 @@ function ScheduleList({
 function SlotLink({ slot, className, children }: { slot: LcSlot; className: string; children: React.ReactNode }) {
   if (!slot.external) {
     return (
-      <Link href={watchHref(slot.series.id, slot.episode.id)} className={className}>
+      <Link
+        href={watchHref(slot.series.id, slot.episode.id)}
+        className={className}
+        onMouseEnter={() => prefetchStreams(slot.episode.id)}
+        onFocus={() => prefetchStreams(slot.episode.id)}
+      >
         {children}
       </Link>
     );
@@ -769,7 +822,7 @@ function RemoteBar({ channelId, onPrev, onNext }: { channelId: ChannelId; onPrev
       <button type="button" onClick={onNext} className={btn} aria-label="Canal siguiente">
         <ChevronUp className="size-4" /> CH +
       </button>
-      <span className="hidden font-mono text-lg text-white/50 md:inline">Control remoto: ↑ ↓ · 1–{channels.length} · deslizá en el celular</span>
+      <span className="hidden font-mono text-lg text-white/65 md:inline">Control remoto: ↑ ↓ · 1–{channels.length} · deslizá en el celular</span>
     </div>
   );
 }

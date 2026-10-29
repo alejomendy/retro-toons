@@ -221,7 +221,18 @@ export async function fetchStreams(episodeId: string): Promise<LcStream[]> {
   // Primero las que el navegador puede reproducir tal cual (ej. el proxy del addon). Las directas de ok.ru
   // piden encabezados y quedan firmadas para la IP del servidor que las pidió: con el addon en la nube suelen fallar.
   const needsHelp = (s: LcStream) => (s.notWebReady || s.requiresHeaders ? 1 : 0);
-  return streams.sort((a, b) => needsHelp(a) - needsHelp(b));
+  return streams.sort((a, b) => needsHelp(a) - needsHelp(b) || qualityRank(a) - qualityRank(b));
+}
+
+/**
+ * Calidad preferida al arrancar. Por el proxy del addon (plan gratis, ~700-950 KB/s) el primer
+ * pedazo de 720p pesa ~5 MB y tarda ~6 s; el de 480p ~2,4 MB y ~3,5 s, y se reproduce sin cortes.
+ * En la biblioteca se puede elegir otra calidad desde el selector de fuente.
+ */
+const QUALITY_ORDER = ["480p", "720p", "360p", "1080p", "240p", "144p"];
+function qualityRank(s: LcStream): number {
+  const i = QUALITY_ORDER.findIndex((q) => s.label.includes(q));
+  return i < 0 ? QUALITY_ORDER.length : i;
 }
 
 /** Cadenas/categorías reales que declara el manifiesto del addon. */
@@ -242,6 +253,6 @@ export async function fetchGenres(): Promise<string[]> {
  * Fuentes en caché 3 h: las URLs firmadas de ok.ru vencen a las ~24 h, así que es seguro y
  * evita esperar de nuevo al addon (que tarda 5-30 s) al volver a abrir un episodio.
  */
-export const fetchStreamsCached = unstable_cache((episodeId: string) => fetchStreams(episodeId), ["lacartoons-streams-v2"], {
+export const fetchStreamsCached = unstable_cache((episodeId: string) => fetchStreams(episodeId), ["lacartoons-streams-v3"], {
   revalidate: 3 * 60 * 60,
 });

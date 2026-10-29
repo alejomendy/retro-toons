@@ -1,1 +1,797 @@
-{ "checkedAt": null, "series": {} }
+{
+  "checkedAt": "2026-10-29T18:38:28.345Z",
+  "series": {
+    "lacart_5": {
+      "name": "Coraje El Perro Cobarde",
+      "playable": true
+    },
+    "lacart_6": {
+      "name": "Duck Dodgers",
+      "playable": true
+    },
+    "lacart_7": {
+      "name": "Static Shock",
+      "playable": true
+    },
+    "lacart_10": {
+      "name": "Generador Rex",
+      "playable": true
+    },
+    "lacart_14": {
+      "name": "Las Chicas Super Poderosas",
+      "playable": true
+    },
+    "lacart_15": {
+      "name": "Las Maravillosas Desventuras de FlapJack",
+      "playable": true
+    },
+    "lacart_16": {
+      "name": "Las Sombrias Aventuras de Billy Y Mandy",
+      "playable": true
+    },
+    "lacart_17": {
+      "name": "La Vaca y El Pollito",
+      "playable": true
+    },
+    "lacart_18": {
+      "name": "Looney Tunes",
+      "playable": true
+    },
+    "lacart_21": {
+      "name": "Los Picapiedras",
+      "playable": false
+    },
+    "lacart_22": {
+      "name": "Los Supersónicos",
+      "playable": true
+    },
+    "lacart_26": {
+      "name": "Sakura Card Captors",
+      "playable": true
+    },
+    "lacart_27": {
+      "name": "Samurai Jack",
+      "playable": true
+    },
+    "lacart_28": {
+      "name": "Samurai X",
+      "playable": true
+    },
+    "lacart_29": {
+      "name": "Samurai Champloo",
+      "playable": true
+    },
+    "lacart_30": {
+      "name": "Scooby Doo Misterios S.A",
+      "playable": true
+    },
+    "lacart_31": {
+      "name": "Ed, Edd y Eddy",
+      "playable": true
+    },
+    "lacart_32": {
+      "name": "Los Jovenes Titanes",
+      "playable": true
+    },
+    "lacart_35": {
+      "name": "Tom y Jerry",
+      "playable": true
+    },
+    "lacart_38": {
+      "name": "X-men Evolucion",
+      "playable": true
+    },
+    "lacart_39": {
+      "name": "Pokemon",
+      "playable": true
+    },
+    "lacart_40": {
+      "name": "Dragon Ball",
+      "playable": true
+    },
+    "lacart_41": {
+      "name": "Dragon Ball Z",
+      "playable": true
+    },
+    "lacart_42": {
+      "name": "Dragon Ball GT",
+      "playable": true
+    },
+    "lacart_43": {
+      "name": "Trigun",
+      "playable": true
+    },
+    "lacart_44": {
+      "name": "Droopy",
+      "playable": true
+    },
+    "lacart_45": {
+      "name": "Johnny Test",
+      "playable": true
+    },
+    "lacart_46": {
+      "name": "Liga de La Justicia",
+      "playable": true
+    },
+    "lacart_47": {
+      "name": "Liga de La Justicia Ilimitada",
+      "playable": true
+    },
+    "lacart_51": {
+      "name": "BeyBlade",
+      "playable": true
+    },
+    "lacart_52": {
+      "name": "Capitán N",
+      "playable": true
+    },
+    "lacart_53": {
+      "name": "Digimon: Digital Monsters",
+      "playable": true
+    },
+    "lacart_54": {
+      "name": "Digimon Adventure 02",
+      "playable": true
+    },
+    "lacart_55": {
+      "name": "Digimon 3 Tamers",
+      "playable": true
+    },
+    "lacart_56": {
+      "name": "Digimon 4 Frontier",
+      "playable": true
+    },
+    "lacart_57": {
+      "name": "El Inspector Gadget",
+      "playable": true
+    },
+    "lacart_58": {
+      "name": "El Pájaro Loco y Amigos",
+      "playable": true
+    },
+    "lacart_60": {
+      "name": "Gargolas, Heroes Goticos",
+      "playable": true
+    },
+    "lacart_61": {
+      "name": "Gundam Wing",
+      "playable": true
+    },
+    "lacart_62": {
+      "name": "He-Man y los Amos del Universo",
+      "playable": true
+    },
+    "lacart_63": {
+      "name": "Las Tortugas Ninjas",
+      "playable": true
+    },
+    "lacart_64": {
+      "name": "Los padrinos mágicos",
+      "playable": true
+    },
+    "lacart_65": {
+      "name": "Medabots",
+      "playable": true
+    },
+    "lacart_66": {
+      "name": "Monster Rancher",
+      "playable": true
+    },
+    "lacart_67": {
+      "name": "Oggy Y Las Cucarachas",
+      "playable": true
+    },
+    "lacart_68": {
+      "name": "Power Rangers",
+      "playable": true
+    },
+    "lacart_73": {
+      "name": "Robocop: La Serie Animada",
+      "playable": true
+    },
+    "lacart_74": {
+      "name": "Sailor  Moon",
+      "playable": true
+    },
+    "lacart_75": {
+      "name": "Shaman King",
+      "playable": true
+    },
+    "lacart_79": {
+      "name": "Spider-Man: La Serie Animada",
+      "playable": true
+    },
+    "lacart_81": {
+      "name": "Silver Surfer",
+      "playable": true
+    },
+    "lacart_83": {
+      "name": "Street Fighter II-V",
+      "playable": true
+    },
+    "lacart_85": {
+      "name": "Transformers G1",
+      "playable": true
+    },
+    "lacart_95": {
+      "name": "El Oso Yogui",
+      "playable": true
+    },
+    "lacart_105": {
+      "name": "La Pantera Rosa",
+      "playable": true
+    },
+    "lacart_107": {
+      "name": "Los 13 Fantasmas de Sooby Doo!",
+      "playable": true
+    },
+    "lacart_108": {
+      "name": "Los Autos Locos",
+      "playable": true
+    },
+    "lacart_109": {
+      "name": "Las Olimpiadas De La Risa",
+      "playable": true
+    },
+    "lacart_119": {
+      "name": "Scooby-Doo, ¿Dónde estás?",
+      "playable": true
+    },
+    "lacart_122": {
+      "name": "Tiro Loco Mcgraw",
+      "playable": true
+    },
+    "lacart_123": {
+      "name": "Don Gato y Su Pandilla",
+      "playable": true
+    },
+    "lacart_124": {
+      "name": "Batman Del Futuro",
+      "playable": true
+    },
+    "lacart_125": {
+      "name": "Batman La Serie Animada",
+      "playable": true
+    },
+    "lacart_126": {
+      "name": "El Mundo De Beakman",
+      "playable": true
+    },
+    "lacart_127": {
+      "name": "Jumanji La Serie Animada",
+      "playable": true
+    },
+    "lacart_128": {
+      "name": "Pinky, Elvira y Cerebro",
+      "playable": true
+    },
+    "lacart_129": {
+      "name": "Pinky y Cerebro",
+      "playable": true
+    },
+    "lacart_130": {
+      "name": "Superman La Serie Animada",
+      "playable": true
+    },
+    "lacart_131": {
+      "name": "Tiny Toons",
+      "playable": true
+    },
+    "lacart_133": {
+      "name": "Animaniacs",
+      "playable": true
+    },
+    "lacart_134": {
+      "name": "Las Aventuras de Silvestre y Piolin",
+      "playable": true
+    },
+    "lacart_135": {
+      "name": "50 Clasicos de Disney",
+      "playable": true
+    },
+    "lacart_136": {
+      "name": "Aladdin La serie Animada",
+      "playable": false
+    },
+    "lacart_137": {
+      "name": "La Sirenita Serie Animada",
+      "playable": true
+    },
+    "lacart_139": {
+      "name": "Avatar La Leyenda de Aang",
+      "playable": true
+    },
+    "lacart_140": {
+      "name": "Avatar La Leyenda de Korra",
+      "playable": true
+    },
+    "lacart_141": {
+      "name": "Bob Esponja",
+      "playable": true
+    },
+    "lacart_142": {
+      "name": "CatDog",
+      "playable": true
+    },
+    "lacart_143": {
+      "name": "Dave El Barbaro",
+      "playable": true
+    },
+    "lacart_145": {
+      "name": "Danny Phantom",
+      "playable": true
+    },
+    "lacart_146": {
+      "name": "Doug",
+      "playable": true
+    },
+    "lacart_147": {
+      "name": "Los Halcones Galácticos",
+      "playable": true
+    },
+    "lacart_151": {
+      "name": "Las Aventuras de Jimmy Neutrón: El Niño Genio",
+      "playable": true
+    },
+    "lacart_152": {
+      "name": "Kenan & Kel",
+      "playable": true
+    },
+    "lacart_153": {
+      "name": "La Robot Adolescente",
+      "playable": true
+    },
+    "lacart_155": {
+      "name": "Le Temes A La Oscuridad?",
+      "playable": true
+    },
+    "lacart_156": {
+      "name": "La Vida Moderna de Rocko",
+      "playable": true
+    },
+    "lacart_157": {
+      "name": "Los Thornberrys",
+      "playable": true
+    },
+    "lacart_161": {
+      "name": "Rocket Power",
+      "playable": true
+    },
+    "lacart_162": {
+      "name": "¡Oye, Arnold!",
+      "playable": true
+    },
+    "lacart_170": {
+      "name": "Los Vengadores: Los Héroes Más Poderosos Del Planeta",
+      "playable": true
+    },
+    "lacart_172": {
+      "name": "Fenomenoide",
+      "playable": true
+    },
+    "lacart_173": {
+      "name": "X-Men Serie Animada",
+      "playable": true
+    },
+    "lacart_174": {
+      "name": "Un Cachorro Llamado Scooby Doo",
+      "playable": true
+    },
+    "lacart_176": {
+      "name": "Jonny Quest",
+      "playable": true
+    },
+    "lacart_180": {
+      "name": "Thundercats",
+      "playable": true
+    },
+    "lacart_181": {
+      "name": "Aaahh!! Monstruos de Verdad",
+      "playable": true
+    },
+    "lacart_185": {
+      "name": "Pato Aventuras",
+      "playable": true
+    },
+    "lacart_186": {
+      "name": "Taz-Mania",
+      "playable": true
+    },
+    "lacart_194": {
+      "name": "Yu yu Hakusho",
+      "playable": true
+    },
+    "lacart_197": {
+      "name": "Sonic X",
+      "playable": true
+    },
+    "lacart_198": {
+      "name": "Invasor Zim",
+      "playable": true
+    },
+    "lacart_199": {
+      "name": "El Show De Charlie Brown y Snoopy",
+      "playable": true
+    },
+    "lacart_205": {
+      "name": "Los Castores Cascarrabias",
+      "playable": true
+    },
+    "lacart_206": {
+      "name": "Johnny Bravo",
+      "playable": true
+    },
+    "lacart_207": {
+      "name": "El Increible Hulk",
+      "playable": true
+    },
+    "lacart_208": {
+      "name": "Los 4 Fantasticos La Serie Animada",
+      "playable": true
+    },
+    "lacart_219": {
+      "name": "Super Mario Bros 3",
+      "playable": true
+    },
+    "lacart_220": {
+      "name": "Super Mario World",
+      "playable": true
+    },
+    "lacart_221": {
+      "name": "Vr Troopers",
+      "playable": true
+    },
+    "lacart_222": {
+      "name": "Big Bad Beetleborgs",
+      "playable": true
+    },
+    "lacart_223": {
+      "name": "KND: Los Chicos Del Barrio",
+      "playable": false
+    },
+    "lacart_225": {
+      "name": "El Laboratorio de Dexter",
+      "playable": true
+    },
+    "lacart_226": {
+      "name": "Megas XLR",
+      "playable": true
+    },
+    "lacart_227": {
+      "name": "Sonic Underground",
+      "playable": true
+    },
+    "lacart_228": {
+      "name": "El Zorro: Serie Animada",
+      "playable": true
+    },
+    "lacart_229": {
+      "name": "Las Nuevas Aventuras De Batman",
+      "playable": true
+    },
+    "lacart_230": {
+      "name": "El Coyote y El Corre Caminos",
+      "playable": true
+    },
+    "lacart_236": {
+      "name": "Detective Conan",
+      "playable": true
+    },
+    "lacart_254": {
+      "name": "La Casa De Los Dibujos",
+      "playable": true
+    },
+    "lacart_255": {
+      "name": "El Principe Del Rap En Bel-Air",
+      "playable": true
+    },
+    "lacart_256": {
+      "name": "Full House",
+      "playable": true
+    },
+    "lacart_257": {
+      "name": "El Show De Scooby Doo",
+      "playable": true
+    },
+    "lacart_262": {
+      "name": "Pixie, Dixie y El Gato Jinks",
+      "playable": true
+    },
+    "lacart_265": {
+      "name": "Death Note",
+      "playable": true
+    },
+    "lacart_266": {
+      "name": "El Gallo Claudio",
+      "playable": true
+    },
+    "lacart_267": {
+      "name": "101 Dalmatas",
+      "playable": true
+    },
+    "lacart_270": {
+      "name": "CowBoy Bebop",
+      "playable": true
+    },
+    "lacart_278": {
+      "name": "Los Pingüinos De Madagascar",
+      "playable": true
+    },
+    "lacart_279": {
+      "name": "Harvey Birdman El Abogado",
+      "playable": true
+    },
+    "lacart_280": {
+      "name": "Ben 10",
+      "playable": true
+    },
+    "lacart_281": {
+      "name": "Ben 10: Fuerza Alienigena",
+      "playable": true
+    },
+    "lacart_283": {
+      "name": "Mucha Lucha",
+      "playable": true
+    },
+    "lacart_291": {
+      "name": "Timon y Pumba",
+      "playable": true
+    },
+    "lacart_292": {
+      "name": "Iron Man: La Serie Animada",
+      "playable": true
+    },
+    "lacart_293": {
+      "name": "Las Nuevas Aventuras De Winnie The Pooh",
+      "playable": true
+    },
+    "lacart_294": {
+      "name": "Jake Long: El Dragón Occidental",
+      "playable": false
+    },
+    "lacart_297": {
+      "name": "Mike, Lu y Og",
+      "playable": true
+    },
+    "lacart_313": {
+      "name": "Recreo: La Serie Animada",
+      "playable": true
+    },
+    "lacart_314": {
+      "name": "El Pato Darkwing",
+      "playable": true
+    },
+    "lacart_315": {
+      "name": "Lilo & Stich",
+      "playable": true
+    },
+    "lacart_316": {
+      "name": "Chip & Dale: Guardianes Rescatadores",
+      "playable": true
+    },
+    "lacart_317": {
+      "name": "Hercules: La Serie Animada",
+      "playable": true
+    },
+    "lacart_318": {
+      "name": "Kim Possible",
+      "playable": true
+    },
+    "lacart_319": {
+      "name": "La Leyenda De Tarzan",
+      "playable": true
+    },
+    "lacart_320": {
+      "name": "Dragon Ball Super",
+      "playable": true
+    },
+    "lacart_325": {
+      "name": "Slam Dunk",
+      "playable": true
+    },
+    "lacart_332": {
+      "name": "Happy Tree Friends",
+      "playable": true
+    },
+    "lacart_333": {
+      "name": "Star Trek",
+      "playable": false
+    },
+    "lacart_334": {
+      "name": "Malcolm En El Medio",
+      "playable": true
+    },
+    "lacart_335": {
+      "name": "Futurama",
+      "playable": true
+    },
+    "lacart_336": {
+      "name": "Bonkers",
+      "playable": true
+    },
+    "lacart_337": {
+      "name": "Aventureros Del Aire",
+      "playable": true
+    },
+    "lacart_338": {
+      "name": "Sabrina: La Serie Animada",
+      "playable": true
+    },
+    "lacart_350": {
+      "name": "Yin Yang Yo!",
+      "playable": true
+    },
+    "lacart_352": {
+      "name": "Cuentos De La Cripta: Serie Animada",
+      "playable": true
+    },
+    "lacart_353": {
+      "name": "Pucca",
+      "playable": true
+    },
+    "lacart_356": {
+      "name": "El Show de Super Mario Bros",
+      "playable": true
+    },
+    "lacart_359": {
+      "name": "¿Qué hay de nuevo, Scooby-Doo?",
+      "playable": true
+    },
+    "lacart_363": {
+      "name": "Popeye",
+      "playable": true
+    },
+    "lacart_368": {
+      "name": "Los Rugrats: Aventuras En Pañales",
+      "playable": true
+    },
+    "lacart_369": {
+      "name": "Rugrats Crecidos",
+      "playable": true
+    },
+    "lacart_371": {
+      "name": "Ren y Stimpy",
+      "playable": true
+    },
+    "lacart_375": {
+      "name": "Hora de Aventura",
+      "playable": true
+    },
+    "lacart_376": {
+      "name": "Un Show Mas",
+      "playable": true
+    },
+    "lacart_381": {
+      "name": "Eek! El Gato",
+      "playable": true
+    },
+    "lacart_383": {
+      "name": "Double Dragon",
+      "playable": true
+    },
+    "lacart_385": {
+      "name": "Las Aventuras De Los Osos Gummis",
+      "playable": true
+    },
+    "lacart_387": {
+      "name": "Phineas y Pherb",
+      "playable": true
+    },
+    "lacart_388": {
+      "name": "Quack Pack",
+      "playable": false
+    },
+    "lacart_389": {
+      "name": "Las Nuevas Locuras Del Emperador",
+      "playable": false
+    },
+    "lacart_394": {
+      "name": "Rick y Morty",
+      "playable": true
+    },
+    "lacart_395": {
+      "name": "Los Simpsons",
+      "playable": true
+    },
+    "lacart_398": {
+      "name": "Action Man: A.T.O.M.",
+      "playable": true
+    },
+    "lacart_400": {
+      "name": "T.U.F.F. Puppy, Agente Secreto",
+      "playable": true
+    },
+    "lacart_409": {
+      "name": "Batman El Valiente",
+      "playable": true
+    },
+    "lacart_425": {
+      "name": "Los Vaqueros de Moo Mesa",
+      "playable": true
+    },
+    "lacart_426": {
+      "name": "Policia De Cuentos De Hadas",
+      "playable": true
+    },
+    "lacart_427": {
+      "name": "Protagonistas De La Historia",
+      "playable": true
+    },
+    "lacart_435": {
+      "name": "Daria",
+      "playable": true
+    },
+    "lacart_437": {
+      "name": "Las Aventuras de Brandy y El Señor Bigotes",
+      "playable": true
+    },
+    "lacart_438": {
+      "name": "El Mundo De Quest",
+      "playable": true
+    },
+    "lacart_446": {
+      "name": "El Show de Amanda",
+      "playable": true
+    },
+    "lacart_449": {
+      "name": "Los Pequeños Looney Tunes",
+      "playable": true
+    },
+    "lacart_450": {
+      "name": "El Pais De Donkey Kong",
+      "playable": true
+    },
+    "lacart_454": {
+      "name": "La Tortuga Franklin",
+      "playable": true
+    },
+    "lacart_455": {
+      "name": "El Mundo Fantastico de Richard Scarry",
+      "playable": true
+    },
+    "lacart_459": {
+      "name": "Mortal Kombat: Defensores Del Reino",
+      "playable": true
+    },
+    "lacart_466": {
+      "name": "Power Rangers Tormenta Ninja",
+      "playable": true
+    },
+    "lacart_467": {
+      "name": "Power Rangers Dino Trueno",
+      "playable": true
+    },
+    "lacart_472": {
+      "name": "Power Rangers RPM",
+      "playable": true
+    },
+    "lacart_473": {
+      "name": "Power Rangers Samurai",
+      "playable": true
+    },
+    "lacart_487": {
+      "name": "Super Escuadrón Ciber Monos Hiperfuerza ¡Ya!",
+      "playable": true
+    },
+    "lacart_488": {
+      "name": "Pepper Ann",
+      "playable": true
+    },
+    "lacart_491": {
+      "name": "Salvados Por La Campana",
+      "playable": true
+    },
+    "lacart_494": {
+      "name": "Xena La Princesa guerrera",
+      "playable": true
+    },
+    "lacart_510": {
+      "name": "El Chavo Del 8",
+      "playable": true
+    },
+    "lacart_517": {
+      "name": "Hi Hi Puffy AmiYumi",
+      "playable": true
+    }
+  }
+}

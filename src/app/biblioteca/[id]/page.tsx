@@ -101,7 +101,7 @@ export default async function SeriePage({ params, searchParams }: { params: Para
         )}
       </section>
 
-      <p className="text-xs text-white/50">Datos y videos: LACartoons (addon de Stremio).</p>
+      <p className="text-xs text-white/65">Datos y videos: LACartoons (addon de Stremio).</p>
     </div>
   );
 }

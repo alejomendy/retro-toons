@@ -129,6 +129,7 @@ export function toggleFavorite(series: Omit<FavoriteSeries, "addedAt">): boolean
     FAVORITES_KEY,
     exists ? list.filter((f) => f.id !== series.id) : [{ ...series, addedAt: Date.now() }, ...list],
   );
+  if (!exists && list.length + 1 >= 5) unlockAchievement("coleccionista");
   return !exists;
 }
 
@@ -154,4 +155,156 @@ export function saveProgress(entry: Omit<WatchProgress, "updatedAt">) {
 
 export function removeProgress(seriesId: string) {
   writeList(PROGRESS_KEY, getProgress().filter((p) => p.seriesId !== seriesId));
+}
+
+// ── Modo «tele de verdad»: último canal y volumen ───────────────────────────
+
+const LAST_CHANNEL_KEY = "retrotoons:ultimo-canal";
+const VOLUME_KEY = "retrotoons:volumen";
+
+function readString(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeString(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Almacenamiento bloqueado: se ignora.
+  }
+}
+
+export function getLastChannel(): string | null {
+  return readString(LAST_CHANNEL_KEY);
+}
+
+export function setLastChannel(channelId: string) {
+  writeString(LAST_CHANNEL_KEY, channelId);
+}
+
+/** Volumen (0..1) y silencio que eligió el usuario, para volver a la tele como la dejó. */
+export function getSavedVolume(): { volume: number; muted: boolean } | null {
+  try {
+    const parsed: unknown = JSON.parse(readString(VOLUME_KEY) ?? "null");
+    if (isRecord(parsed) && isNum(parsed.volume) && typeof parsed.muted === "boolean") {
+      return { volume: Math.min(1, Math.max(0, parsed.volume)), muted: parsed.muted };
+    }
+  } catch {
+    // Valor corrupto: se ignora.
+  }
+  return null;
+}
+
+export function saveVolume(volume: number, muted: boolean) {
+  writeString(VOLUME_KEY, JSON.stringify({ volume, muted }));
+}
+
+// ── Maratón y logros ────────────────────────────────────────────────────────
+
+const MARATHON_KEY = "retrotoons:maraton";
+const ACHIEVEMENTS_KEY = "retrotoons:logros";
+const ZAPS_KEY = "retrotoons:zapping";
+export const ACHIEVEMENT_EVENT = "retrotoons:logro";
+/** Más de esto entre episodios corta la maratón. */
+const MARATHON_GAP_MS = 2 * 60 * 60 * 1000;
+
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+}
+
+/** Logros retro que se desbloquean mirando. */
+export const ACHIEVEMENTS: Achievement[] = [
+  { id: "primer-episodio", title: "¡Bienvenido a la tele!", description: "Terminaste tu primer episodio.", icon: "📺" },
+  { id: "maraton-3", title: "Maratonero", description: "3 episodios seguidos de la misma serie.", icon: "🔥" },
+  { id: "maraton-5", title: "Pegado a la tele", description: "5 episodios seguidos de la misma serie.", icon: "🛋️" },
+  { id: "noctambulo", title: "Noctámbulo", description: "Terminaste un episodio entre la medianoche y las 5.", icon: "🌙" },
+  { id: "zapping", title: "Rey del zapping", description: "Cambiaste de canal 10 veces.", icon: "📡" },
+  { id: "trotamundos", title: "Trotamundos", description: "Sintonizaste los seis canales.", icon: "🗺️" },
+  { id: "coleccionista", title: "Coleccionista", description: "Guardaste 5 series en favoritos.", icon: "💖" },
+];
+
+export interface Marathon {
+  seriesId: string;
+  seriesName: string;
+  count: number;
+  lastAt: number;
+}
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = readString(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Desbloquea un logro (una sola vez) y avisa a la pantalla para mostrar el cartel. */
+export function unlockAchievement(id: string) {
+  const unlocked = readJson<Record<string, number>>(ACHIEVEMENTS_KEY, {});
+  if (unlocked[id] || !ACHIEVEMENTS.some((a) => a.id === id)) return;
+  unlocked[id] = Date.now();
+  writeString(ACHIEVEMENTS_KEY, JSON.stringify(unlocked));
+  window.dispatchEvent(new CustomEvent(ACHIEVEMENT_EVENT, { detail: id }));
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+}
+
+let achievementsCache: { raw: string | null; value: Record<string, number> } = { raw: null, value: {} };
+const EMPTY_ACHIEVEMENTS: Record<string, number> = {};
+function getAchievements(): Record<string, number> {
+  const raw = readString(ACHIEVEMENTS_KEY);
+  if (raw !== achievementsCache.raw) achievementsCache = { raw, value: readJson(ACHIEVEMENTS_KEY, {}) };
+  return achievementsCache.value;
+}
+
+/** Logros desbloqueados (id → fecha). En el servidor, ninguno. */
+export function useAchievements(): Record<string, number> {
+  return useSyncExternalStore(subscribe, getAchievements, () => EMPTY_ACHIEVEMENTS);
+}
+
+/** Se llama al terminar un episodio: suma a la maratón y revisa logros. Devuelve la maratón actual. */
+export function recordFinishedEpisode(seriesId: string, seriesName: string): Marathon {
+  const prev = readJson<Marathon | null>(MARATHON_KEY, null);
+  const now = Date.now();
+  const same = prev && prev.seriesId === seriesId && now - prev.lastAt < MARATHON_GAP_MS;
+  const marathon: Marathon = { seriesId, seriesName, count: same ? prev.count + 1 : 1, lastAt: now };
+  writeString(MARATHON_KEY, JSON.stringify(marathon));
+  window.dispatchEvent(new Event(CHANGE_EVENT));
+
+  unlockAchievement("primer-episodio");
+  if (marathon.count >= 3) unlockAchievement("maraton-3");
+  if (marathon.count >= 5) unlockAchievement("maraton-5");
+  if (new Date(now).getHours() < 5) unlockAchievement("noctambulo");
+  return marathon;
+}
+
+const NO_MARATHON = null;
+let marathonCache: { raw: string | null; value: Marathon | null } = { raw: null, value: null };
+function getMarathon(): Marathon | null {
+  const raw = readString(MARATHON_KEY);
+  if (raw !== marathonCache.raw) marathonCache = { raw, value: readJson<Marathon | null>(MARATHON_KEY, null) };
+  const m = marathonCache.value;
+  return m && Date.now() - m.lastAt < MARATHON_GAP_MS ? m : NO_MARATHON;
+}
+
+/** Maratón en curso (si el último episodio terminó hace menos de 2 h). */
+export function useMarathon(): Marathon | null {
+  return useSyncExternalStore(subscribe, getMarathon, () => NO_MARATHON);
+}
+
+/** Cambio de canal en la programación: para los logros de zapping y de los seis canales. */
+export function recordChannelVisit(channelId: string, totalChannels: number) {
+  const state = readJson<{ zaps: number; seen: string[] }>(ZAPS_KEY, { zaps: 0, seen: [] });
+  const seen = state.seen.includes(channelId) ? state.seen : [...state.seen, channelId];
+  const next = { zaps: state.zaps + 1, seen };
+  writeString(ZAPS_KEY, JSON.stringify(next));
+  if (next.zaps >= 10) unlockAchievement("zapping");
+  if (seen.length >= totalChannels) unlockAchievement("trotamundos");
 }

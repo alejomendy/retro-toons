@@ -5,6 +5,8 @@ import ContinueWatching from "@/components/series/ContinueWatching";
 import PageHeader, { SectionTitle } from "@/components/PageHeader";
 import BibliotecaClient from "./BibliotecaClient";
 import ExternalSeries, { ExternalSeriesSkeleton } from "./ExternalSeries";
+import SurpriseButton from "@/components/series/SurpriseButton";
+import AchievementsSection from "@/components/series/AchievementsSection";
 
 export const metadata: Metadata = { title: "Biblioteca — RetroToons" };
 export const dynamic = "force-dynamic";
@@ -16,7 +18,7 @@ export default async function BibliotecaPage() {
   const genres = await getGenres();
   return (
     <div className="space-y-12">
-      <PageHeader kicker="A demanda · como en el videoclub" title="Biblioteca" kickerColor="#ffd400" kickerInk="#000000">
+      <PageHeader kicker="A demanda · como en el videoclub" title="Biblioteca" kickerColor="#ffd400" kickerInk="#000000" aside={<SurpriseButton />}>
         Elegí cualquier serie y mirá el episodio que quieras, cuando quieras. Todo en español latino.
       </PageHeader>
       <ContinueWatching />
@@ -29,6 +31,7 @@ export default async function BibliotecaPage() {
       <Suspense fallback={<ExternalSeriesSkeleton />}>
         <ExternalSeries />
       </Suspense>
+      <AchievementsSection />
     </div>
   );
 }

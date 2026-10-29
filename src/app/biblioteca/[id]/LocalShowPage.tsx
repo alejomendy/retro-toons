@@ -72,7 +72,7 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
           {(episode.summary || episode.airdate) && (
             <div className="chunky rounded-xl bg-panel p-4">
               <p className="font-display text-lg text-white">{episode.title}</p>
-              {episode.airdate && <p className="font-mono text-xl text-white/60">Emitido el {formatAirdate(episode.airdate)}</p>}
+              {episode.airdate && <p className="font-mono text-xl text-white/65">Emitido el {formatAirdate(episode.airdate)}</p>}
               {episode.summary && <p className="mt-1 text-sm text-white/80">{episode.summary}</p>}
             </div>
           )}
@@ -89,7 +89,7 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
             <div className="relative space-y-2 p-4">
               <h1 className="font-display text-2xl text-accent">{show.title}</h1>
               {extras.localTitle && extras.localTitle.toLowerCase() !== show.title.toLowerCase() && (
-                <p className="text-sm italic text-white/60">También conocida como: {extras.localTitle}</p>
+                <p className="text-sm italic text-white/65">También conocida como: {extras.localTitle}</p>
               )}
               <div className="flex flex-wrap gap-1">{show.channels.map((c) => <ChannelBadge key={c} id={c} />)}</div>
               <p className="font-mono text-xl text-white/70">
@@ -103,7 +103,7 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
           {extras.free.length > 0 && (
             <div className="chunky rounded-xl bg-panel p-4">
               <h2 className="font-display text-lg text-white">Gratis y legal en Pluto TV</h2>
-              <p className="text-sm text-white/60">Con publicidad, sin suscripción. Los canales en vivo se ven acá mismo.</p>
+              <p className="text-sm text-white/65">Con publicidad, sin suscripción. Los canales en vivo se ven acá mismo.</p>
               <ul className="mt-3 grid gap-3 sm:grid-cols-2">
                 {extras.free.map((f) => (
                   <li key={f.url}>
@@ -146,7 +146,7 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
                 ))}
               </ul>
               {extras.providersLink && (
-                <a href={extras.providersLink} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-white/50 underline">
+                <a href={extras.providersLink} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-white/65 underline">
                   Ver más opciones (JustWatch vía TMDB)
                 </a>
               )}
@@ -166,14 +166,14 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
                       loading="lazy"
                       allowFullScreen
                     />
-                    <p className="mt-1 truncate text-xs text-white/60">{v.name}</p>
+                    <p className="mt-1 truncate text-xs text-white/65">{v.name}</p>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          <p className="flex flex-wrap gap-x-3 text-xs text-white/50">
+          <p className="flex flex-wrap gap-x-3 text-xs text-white/65">
             <span>Datos:</span>
             {extras.tmdbId && (
               <a href={`https://www.themoviedb.org/tv/${extras.tmdbId}`} target="_blank" rel="noreferrer" className="underline">
@@ -191,7 +191,7 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
 
         <aside className="chunky flex max-h-[640px] flex-col overflow-hidden rounded-xl bg-panel">
           <h2 className="border-b-4 border-black bg-black px-4 py-2 font-display text-lg text-accent">
-            Episodios <span className="font-mono text-xl text-white/60">({show.episodeCount})</span>
+            Episodios <span className="font-mono text-xl text-white/65">({show.episodeCount})</span>
           </h2>
           <ol className="flex-1 overflow-y-auto">
             {episodes.map((e) => {
@@ -206,7 +206,7 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
                   >
                     <span className="w-10 font-mono text-2xl leading-none text-accent">{String(e.number).padStart(2, "0")}</span>
                     <span className="flex-1 truncate">{e.title}</span>
-                    {active ? <Play className="size-4 fill-current" /> : <span className="text-xs text-white/50">{e.minutes}′</span>}
+                    {active ? <Play className="size-4 fill-current" /> : <span className="text-xs text-white/65">{e.minutes}′</span>}
                     {!e.source && <span className="sr-only">(sin video cargado)</span>}
                   </Link>
                 </li>

@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, ListVideo, Minimize2, Play, X } from "lucide-react";
 import VideoPlayer from "@/components/VideoPlayer";
 import EpisodeBrowser from "@/components/series/EpisodeBrowser";
 import FavoriteButton from "@/components/series/FavoriteButton";
 import { episodeLabel, seriesHref, watchHref, type LcEpisode } from "@/lib/lacartoons-types";
-import { getSeriesProgress, isFinished, removeProgress, saveProgress } from "@/lib/user-library";
+import { getSeriesProgress, isFinished, recordFinishedEpisode, removeProgress, saveProgress, useMarathon } from "@/lib/user-library";
 import { theaterBand, theaterWidth, useTheaterMode } from "@/lib/use-theater";
 import { prefetchStreams } from "@/lib/prefetch-streams";
 
@@ -30,6 +30,9 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
 
   const [countdown, setCountdown] = useState<number | null>(null);
   const [cinema, setCinema] = useTheaterMode();
+  const finishedRef = useRef(new Set<string>());
+  const marathon = useMarathon();
+  const marathonHere = marathon && marathon.seriesId === series.id && marathon.count >= 2 ? marathon.count : 0;
   const [resumeAt, setResumeAt] = useState<number | null>(null);
 
   // Al entrar a un episodio sin ?t, ofrecer seguir desde donde quedó (localStorage solo en el cliente).
@@ -46,6 +49,11 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
       const ep = videos[i];
       const following = videos[i + 1];
       if (isFinished(position, duration)) {
+        // Cuenta para la maratón y los logros (una vez por episodio).
+        if (!finishedRef.current.has(episodeId)) {
+          finishedRef.current.add(episodeId);
+          recordFinishedEpisode(series.id, series.name);
+        }
         // Terminado: "Continuar viendo" pasa al siguiente episodio, o se quita si era el último.
         if (following) {
           saveProgress({ ...entryFor(series, following), position: 0, duration: 0 });
@@ -161,6 +169,11 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
 
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
+              {marathonHere > 0 && (
+                <p className="sticker mb-2 inline-block rounded-md bg-[#ff3ea5] px-2 py-0.5 font-mono text-lg text-white">
+                  🔥 Maratón: {marathonHere} episodios seguidos
+                </p>
+              )}
               <p className="font-mono text-xl text-accent">
                 {episode.season === 0 ? "Especial" : `Temporada ${episode.season}`} · Episodio {episode.episode}
               </p>
@@ -200,7 +213,7 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
 
         <aside id="lista-episodios" className="chunky flex max-h-[680px] flex-col overflow-hidden rounded-xl bg-panel" aria-label="Lista de episodios">
           <h2 className="flex items-center justify-between border-b-4 border-black bg-black px-4 py-2 font-display text-lg text-accent">
-            Episodios <span className="font-mono text-xl text-white/60">{index + 1}/{videos.length}</span>
+            Episodios <span className="font-mono text-xl text-white/65">{index + 1}/{videos.length}</span>
           </h2>
           <div className="flex-1 overflow-y-auto p-2">
             <EpisodeBrowser seriesId={series.id} videos={videos} currentId={episode.id} variant="list" />

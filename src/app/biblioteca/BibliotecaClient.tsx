@@ -169,7 +169,7 @@ export default function BibliotecaClient({ genres }: { genres: string[] }) {
 
       {showFavorites ? (
         <>
-          <p className="font-mono text-xl text-white/60">{favoriteResults.length} series en favoritos</p>
+          <p className="font-mono text-xl text-white/65">{favoriteResults.length} series en favoritos</p>
           {favoriteResults.length === 0 ? (
             <StateMessage
               tone="info"
@@ -196,7 +196,7 @@ export default function BibliotecaClient({ genres }: { genres: string[] }) {
         </>
       ) : (
         <>
-          <p className="font-mono text-xl text-white/60" aria-live="polite">
+          <p className="font-mono text-xl text-white/65" aria-live="polite">
             {status === "loading"
               ? "Buscando..."
               : status === "ready" &&
@@ -228,7 +228,7 @@ export default function BibliotecaClient({ genres }: { genres: string[] }) {
           )}
 
           {status === "ready" && results.length === 0 && (
-            <p className="text-center text-white/60">
+            <p className="text-center text-white/65">
               {query ? `No encontramos series para “${query}”${genre ? ` en ${genre}` : ""}. Probá con otro título o filtro.` : "No hay series para mostrar."}
             </p>
           )}

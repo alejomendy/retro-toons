@@ -40,7 +40,7 @@ export default function SeriesCard({ id, name, poster, meta, badges, children }:
         <SeriesPoster src={poster} name={name} sizes="(min-width: 1024px) 270px, (min-width: 640px) 30vw, 45vw" />
         <div className="flex-1 space-y-1.5 border-t-4 border-black p-3">
           <p className="line-clamp-2 font-bold leading-tight">{name}</p>
-          {meta && <p className="text-xs text-white/60">{meta}</p>}
+          {meta && <p className="text-xs text-white/65">{meta}</p>}
           {badges}
         </div>
       </Link>

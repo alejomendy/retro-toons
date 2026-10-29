@@ -217,7 +217,7 @@ export function NoSignal({ title, subtitle, fallback, hint = "SIN SEÑAL · Este
           {subtitle && <p className="font-mono text-xl text-accent sm:text-2xl">{subtitle}</p>}
           {fallback ? (
             <>
-              <p className="mt-2 font-mono text-lg text-white/60">SIN SEÑAL acá, pero la podés ver gratis:</p>
+              <p className="mt-2 font-mono text-lg text-white/65">SIN SEÑAL acá, pero la podés ver gratis:</p>
               <a
                 href={fallback.url}
                 target="_blank"
@@ -228,7 +228,7 @@ export function NoSignal({ title, subtitle, fallback, hint = "SIN SEÑAL · Este
               </a>
             </>
           ) : (
-            hint && <p className="mt-2 font-mono text-lg text-white/60">{hint}</p>
+            hint && <p className="mt-2 font-mono text-lg text-white/65">{hint}</p>
           )}
         </div>
       </div>

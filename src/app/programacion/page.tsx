@@ -10,7 +10,8 @@ export default async function ProgramacionPage({ searchParams }: { searchParams:
   // OnAirProvider: lo que pasan los otros canales, para la tanda y el control remoto.
   return (
     <OnAirProvider>
-      <ProgramacionClient channelId={isChannelId(canal) ? canal : "cartoon-network"} />
+      {/* explicit: el canal vino en la URL. Si no, la tele vuelve al último canal que miraste. */}
+      <ProgramacionClient channelId={isChannelId(canal) ? canal : "cartoon-network"} explicit={isChannelId(canal)} />
     </OnAirProvider>
   );
 }

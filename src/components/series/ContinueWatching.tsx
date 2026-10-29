@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Play, Tv, X } from "lucide-react";
 import { episodeLabel, watchHref } from "@/lib/lacartoons-types";
 import { removeProgress, useContinueWatching } from "@/lib/user-library";
+import { prefetchStreams } from "@/lib/prefetch-streams";
 import { SectionTitle } from "@/components/PageHeader";
 
 /** Fila «Continuar viendo». No renderiza nada si no hay episodios empezados. */
@@ -22,6 +23,8 @@ export default function ContinueWatching() {
             <li key={p.seriesId} className="relative w-64 shrink-0 snap-start sm:w-72">
               <Link
                 href={watchHref(p.seriesId, p.episodeId, p.position)}
+                onMouseEnter={() => prefetchStreams(p.episodeId)}
+                onFocus={() => prefetchStreams(p.episodeId)}
                 className="chunky group flex h-full overflow-hidden rounded-xl bg-panel transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent motion-reduce:transition-none"
               >
                 <div className="relative w-20 shrink-0 bg-black/50">
@@ -50,7 +53,7 @@ export default function ContinueWatching() {
                 onClick={() => removeProgress(p.seriesId)}
                 aria-label={`Quitar ${p.seriesName} de Continuar viendo`}
                 title="Quitar"
-                className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-white/60 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+                className="absolute right-2 top-2 grid size-7 place-items-center rounded-full text-white/65 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
               >
                 <X className="size-4" />
               </button>

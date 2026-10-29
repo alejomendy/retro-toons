@@ -5,6 +5,7 @@ import videojs from "video.js";
 import "video.js/dist/video-js.css";
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { lcErrorMessages, type LcErrorCode, type LcStream } from "@/lib/lacartoons-types";
+import { getSavedVolume, saveVolume } from "@/lib/user-library";
 
 type VideoPlayerProps = {
     episodeId: string;
@@ -39,7 +40,14 @@ type VideoJsInstance = {
         (seconds: number): unknown;
     };
     duration: () => number;
-    muted: (muted: boolean) => unknown;
+    muted: {
+        (): boolean;
+        (muted: boolean): unknown;
+    };
+    volume: {
+        (): number;
+        (volume: number): unknown;
+    };
     error: () => { code: number; message?: string } | null;
     on: (event: string, handler: () => void) => void;
 };
@@ -93,6 +101,8 @@ export default function VideoPlayer({
     const requestedAtRef = useRef(0);
     const liveRef = useRef(live);
     const autoPlayRef = useRef(autoPlay);
+    /** El navegador bloqueó el autoplay con sonido y se silenció solo: eso no se guarda como preferencia. */
+    const autoMutedRef = useRef(false);
     const lastReportRef = useRef(0);
     /** Episodio cuya fuente está cargada en el player (difiere de episodeRef mientras se cambia de episodio). */
     const activeEpisodeRef = useRef("");
@@ -129,6 +139,18 @@ export default function VideoPlayer({
 
         playerRef.current = player;
 
+        // Modo «tele de verdad»: vuelve con el volumen y el silencio que dejaste.
+        const savedVolume = getSavedVolume();
+        if (savedVolume) {
+            player.volume(savedVolume.volume);
+            player.muted(savedVolume.muted);
+        }
+        player.on("volumechange", () => {
+            if (autoMutedRef.current && player.muted()) return;
+            autoMutedRef.current = false;
+            saveVolume(player.volume(), player.muted());
+        });
+
         const report = () => {
             if (player.isDisposed()) return;
             // Entre episodios el player todavía tiene el video anterior: no se informa nada.
@@ -160,6 +182,7 @@ export default function VideoPlayer({
                 player.play()?.catch(() => {
                     if (!isLive) return; // Queda el botón de play.
                     // En vivo: los navegadores dejan arrancar sin sonido; se activa desde el control de volumen.
+                    autoMutedRef.current = true;
                     player.muted(true);
                     player.play()?.catch(() => {});
                 });

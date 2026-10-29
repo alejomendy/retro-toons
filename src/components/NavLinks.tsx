@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarClock, Library } from "lucide-react";
+import { CalendarClock, LayoutGrid, Library } from "lucide-react";
 
 const links = [
   { href: "/programacion", label: "Programación", icon: CalendarClock, live: true },
+  { href: "/guia", label: "Guía", icon: LayoutGrid, live: false },
   { href: "/biblioteca", label: "Biblioteca", icon: Library, live: false },
 ];
 
