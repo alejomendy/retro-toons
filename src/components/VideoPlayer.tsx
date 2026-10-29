@@ -55,6 +55,26 @@ type VideoJsInstance = {
 
 /** Cada cuánto se informa el progreso mientras se reproduce. */
 const PROGRESS_INTERVAL_MS = 5000;
+/** Tope para conseguir las fuentes (el servidor corta al addon a los 45 s). */
+const STREAMS_TIMEOUT_MS = 50_000;
+/** Después de esto se avisa que el servidor de videos está despertando. */
+const SLOW_NOTICE_MS = 8000;
+/** Una fuente que no carga ni los datos del video en este tiempo se da por caída. */
+const LOAD_TIMEOUT_MS = 20_000;
+/** Un video trabado cargando (sin avanzar) este tiempo pasa a otra fuente. */
+const STALL_TIMEOUT_MS = 25_000;
+
+/**
+ * Programa un vigía: si vence con la pestaña en segundo plano (donde el navegador frena la carga)
+ * se vuelve a armar en vez de dar la fuente por caída.
+ */
+function armWatchdog(ref: { current: number | undefined }, ms: number, onTimeout: () => void) {
+    window.clearTimeout(ref.current);
+    ref.current = window.setTimeout(() => {
+        if (document.visibilityState === "hidden") armWatchdog(ref, ms, onTimeout);
+        else onTimeout();
+    }, ms);
+}
 
 /** Mensajes según MediaError.code (1 abortado, 2 red, 3 decodificación, 4 no soportado). */
 function playbackErrorMessage(code: number | undefined, stream: LcStream | null): string {
@@ -92,6 +112,10 @@ export default function VideoPlayer({
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
     const [playbackError, setPlaybackError] = useState("");
+    /** Las fuentes están tardando más de lo normal (el addon gratis se duerme). */
+    const [slow, setSlow] = useState(false);
+    /** Se sube para volver a pedir las fuentes con el botón de reintentar. */
+    const [retry, setRetry] = useState(0);
 
     // Valores que leen los listeners de Video.js sin tener que volver a registrarlos.
     const episodeRef = useRef(episodeId);
@@ -108,6 +132,13 @@ export default function VideoPlayer({
     /** Episodio cuya fuente está cargada en el player (difiere de episodeRef mientras se cambia de episodio). */
     const activeEpisodeRef = useRef("");
     const reportRef = useRef<() => void>(() => {});
+    /** Vigilan que la fuente cargue y que no quede trabada (ver LOAD_TIMEOUT_MS y STALL_TIMEOUT_MS). */
+    const loadTimerRef = useRef<number | undefined>(undefined);
+    const stallTimerRef = useRef<number | undefined>(undefined);
+    /** Da por caída la fuente actual (la siguiente se prueba sola). */
+    const failRef = useRef<(message: string) => void>(() => {});
+    /** En vivo, el punto del episodio en que se pidió: al cambiar de fuente se recalcula desde acá. */
+    const liveStartRef = useRef(0);
 
     useEffect(() => {
         callbacksRef.current = { onProgress, onEnded, onPlaying, onUnavailable };
@@ -164,7 +195,26 @@ export default function VideoPlayer({
         };
         reportRef.current = report;
 
+        const clearWatchdogs = () => {
+            window.clearTimeout(loadTimerRef.current);
+            window.clearTimeout(stallTimerRef.current);
+        };
+        failRef.current = (message: string) => {
+            clearWatchdogs();
+            const stream = streamRef.current;
+            if (!stream || player.isDisposed()) return;
+            setPlaybackError(message);
+            setFailedUrls((prev) => (prev.includes(stream.url) ? prev : [...prev, stream.url]));
+        };
+        // Cargando sin avanzar: si no se destraba solo, se pasa a otra fuente.
+        player.on("waiting", () => {
+            window.clearTimeout(stallTimerRef.current);
+            armWatchdog(stallTimerRef, STALL_TIMEOUT_MS, () => failRef.current("El video se trabó cargando."));
+        });
+        player.on("canplay", () => window.clearTimeout(stallTimerRef.current));
+
         player.on("loadedmetadata", () => {
+            window.clearTimeout(loadTimerRef.current);
             const delay = isLive ? (Date.now() - requestedAtRef.current) / 1000 : 0;
             const seek = pendingSeekRef.current + delay;
             const duration = player.duration();
@@ -190,6 +240,7 @@ export default function VideoPlayer({
             }
         });
         player.on("playing", () => {
+            clearWatchdogs();
             setPlaybackError("");
             if (activeEpisodeRef.current && activeEpisodeRef.current === episodeRef.current) {
                 callbacksRef.current.onPlaying?.(activeEpisodeRef.current);
@@ -206,6 +257,7 @@ export default function VideoPlayer({
             }
         });
         player.on("error", () => {
+            clearWatchdogs();
             const stream = streamRef.current;
             setPlaybackError(playbackErrorMessage(player.error()?.code, stream));
             if (stream) {
@@ -220,6 +272,7 @@ export default function VideoPlayer({
         document.addEventListener("visibilitychange", onHide);
 
         return () => {
+            clearWatchdogs();
             report();
             window.removeEventListener("pagehide", report);
             document.removeEventListener("visibilitychange", onHide);
@@ -240,12 +293,16 @@ export default function VideoPlayer({
 
         episodeRef.current = episodeId;
         pendingSeekRef.current = startAt && startAt > 0 ? startAt : 0;
+        liveStartRef.current = pendingSeekRef.current;
         autoPlayRef.current = autoPlay;
         requestedAtRef.current = Date.now();
         lastReportRef.current = Date.now();
 
+        const slowTimer = window.setTimeout(() => setSlow(true), SLOW_NOTICE_MS);
+
         async function loadStreams() {
             setLoading(true);
+            setSlow(false);
             setError("");
             setPlaybackError("");
             setStreams([]);
@@ -254,10 +311,19 @@ export default function VideoPlayer({
 
             try {
                 // Si ya se pidieron de antemano (prefetch), se reusa esa misma respuesta.
+                // Con tope de tiempo: nunca queda "sintonizando" para siempre.
                 const request = async () => {
-                    const res = await getStreams(episodeId);
-                    if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
-                    return res;
+                    let timer: number | undefined;
+                    const timeout = new Promise<never>((_, reject) => {
+                        timer = window.setTimeout(() => reject(new Error(lcErrorMessages.ADDON_UNREACHABLE)), STREAMS_TIMEOUT_MS);
+                    });
+                    try {
+                        const res = await Promise.race([getStreams(episodeId), timeout]);
+                        if (controller.signal.aborted) throw new DOMException("Aborted", "AbortError");
+                        return res;
+                    } finally {
+                        window.clearTimeout(timer);
+                    }
                 };
 
                 let { status, data } = await request();
@@ -307,8 +373,10 @@ export default function VideoPlayer({
                 );
                 callbacksRef.current.onUnavailable?.(episodeId);
             } finally {
+                window.clearTimeout(slowTimer);
                 if (!controller.signal.aborted) {
                     setLoading(false);
+                    setSlow(false);
                 }
             }
         }
@@ -323,10 +391,11 @@ export default function VideoPlayer({
 
         return () => {
             controller.abort();
+            window.clearTimeout(slowTimer);
             // Guardar dónde quedó el episodio que se deja.
             reportRef.current();
         };
-    }, [episodeId, startAt, autoPlay]);
+    }, [episodeId, startAt, autoPlay, retry]);
 
     // Configurar la fuente seleccionada.
     useEffect(() => {
@@ -345,6 +414,8 @@ export default function VideoPlayer({
         });
 
         player.load();
+        // Si en un rato no llegan ni los datos del video, la fuente se da por caída.
+        armWatchdog(loadTimerRef, LOAD_TIMEOUT_MS, () => failRef.current("La fuente de video no responde."));
     }, [selectedStream]);
 
     function selectStream(stream: LcStream) {
@@ -362,16 +433,29 @@ export default function VideoPlayer({
         (s) => s.url !== selectedStream?.url && !failedUrls.includes(s.url)
     );
 
-    // En vivo no hay selector: si la fuente falla se prueba la siguiente sola.
+    // Si la fuente falla, se prueba la siguiente sola (en vivo y en la biblioteca).
     useEffect(() => {
-        if (!live || !nextUntried || !selectedStream || !failedUrls.includes(selectedStream.url)) return;
+        if (!nextUntried || !selectedStream || !failedUrls.includes(selectedStream.url)) return;
         const player = playerRef.current;
         if (player && !player.isDisposed()) {
-            pendingSeekRef.current = Math.max(0, player.currentTime());
-            autoPlayRef.current = true;
+            const position = player.currentTime();
+            // En vivo se recalcula desde el punto original más lo que pasó desde que se pidió.
+            pendingSeekRef.current = live ? liveStartRef.current : Math.max(pendingSeekRef.current, position);
+            autoPlayRef.current = live || position > 0 || autoPlayRef.current;
         }
         setSelectedStream(nextUntried);
     }, [live, nextUntried, selectedStream, failedUrls]);
+
+    /** Vuelve a empezar: pide las fuentes de nuevo (por si el addon ya despertó). */
+    function retryAll() {
+        const player = playerRef.current;
+        if (player && !player.isDisposed()) {
+            const position = player.currentTime();
+            if (position > 0) pendingSeekRef.current = position;
+        }
+        forgetStreams(episodeId);
+        setRetry((n) => n + 1);
+    }
 
     // Todas las fuentes fallaron: se avisa para que la tele pruebe con otro episodio.
     const allFailed = streams.length > 0 && streams.every((s) => failedUrls.includes(s.url));
@@ -389,7 +473,7 @@ export default function VideoPlayer({
                         <div className="absolute inset-0 grid place-items-center p-4 text-center">
                             {loading ? (
                                 <p role="status" className="flex items-center gap-2 rounded-lg bg-black/75 px-5 py-3 font-mono text-xl text-white sm:text-2xl">
-                                    <Loader2 className="size-5 animate-spin" /> Sintonizando...
+                                    <Loader2 className="size-5 animate-spin" /> {slow ? "Despertando la antena..." : "Sintonizando..."}
                                 </p>
                             ) : (
                                 <div role="alert" className="max-w-md rounded-lg bg-black/75 px-5 py-3">
@@ -412,14 +496,18 @@ export default function VideoPlayer({
                 {(loading || error) && (
                     <div className="absolute inset-0 z-10 grid place-items-center bg-black p-4 text-center">
                         {loading ? (
-                            <p role="status" className="flex items-center gap-2 font-mono text-xl text-white/80">
-                                <Loader2 className="size-5 animate-spin" /> Sintonizando el episodio...
-                            </p>
+                            <div role="status" className="flex flex-col items-center gap-1">
+                                <p className="flex items-center gap-2 font-mono text-xl text-white/80">
+                                    <Loader2 className="size-5 animate-spin" /> Sintonizando el episodio...
+                                </p>
+                                {slow && <p className="max-w-sm text-sm text-white/65">El servidor de videos se estaba durmiendo: la primera vez puede tardar hasta medio minuto.</p>}
+                            </div>
                         ) : (
-                            <p role="alert" className="flex max-w-md flex-col items-center gap-2 text-white">
+                            <div role="alert" className="flex max-w-md flex-col items-center gap-3 text-white">
                                 <AlertTriangle className="size-8 text-[#ff3ea5]" />
-                                {error}
-                            </p>
+                                <p>{error}</p>
+                                <RetryButton onClick={retryAll} />
+                            </div>
                         )}
                     </div>
                 )}
@@ -438,7 +526,10 @@ export default function VideoPlayer({
                             <RefreshCw className="size-4" /> Probar otra fuente
                         </button>
                     ) : (
-                        streams.length > 1 && <span className="text-white/70">Ninguna de las fuentes disponibles pudo reproducirse.</span>
+                        <>
+                            {streams.length > 1 && <span className="text-white/70">Ninguna de las fuentes disponibles pudo reproducirse.</span>}
+                            <RetryButton onClick={retryAll} />
+                        </>
                     )}
                 </div>
             )}
@@ -483,5 +574,17 @@ export default function VideoPlayer({
                 </div>
             )}
         </section>
+    );
+}
+
+function RetryButton({ onClick }: { onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            className="inline-flex items-center gap-1 rounded-md border-2 border-black bg-white px-2 py-1 text-sm font-bold text-black hover:bg-accent focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+        >
+            <RefreshCw className="size-4" /> Reintentar
+        </button>
     );
 }

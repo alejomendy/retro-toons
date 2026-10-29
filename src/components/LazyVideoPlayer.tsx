@@ -1,9 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { ComponentProps } from "react";
+import { useRef, type ComponentProps } from "react";
 import type VideoPlayerType from "./VideoPlayer";
-import { prefetchStreams } from "@/lib/prefetch-streams";
+import { getStreams } from "@/lib/prefetch-streams";
 
 /** Video.js pesa ~220 kB: se baja aparte, así la página y la grilla aparecen antes. */
 const VideoPlayer = dynamic(() => import("./VideoPlayer"), {
@@ -19,6 +19,10 @@ type Props = ComponentProps<typeof VideoPlayerType>;
 
 /** El reproductor, cargado a demanda. Las fuentes se piden mientras baja el código, no después. */
 export default function LazyVideoPlayer(props: Props) {
-  if (typeof window !== "undefined" && props.episodeId) prefetchStreams(props.episodeId);
+  const started = useRef("");
+  if (typeof window !== "undefined" && props.episodeId && started.current !== props.episodeId) {
+    started.current = props.episodeId;
+    getStreams(props.episodeId).catch(() => {});
+  }
   return <VideoPlayer {...props} />;
 }

@@ -58,7 +58,8 @@ const fullCatalog = unstable_cache(
 );
 
 // Con el póster de TMDB ya aplicado (se usa en la tele del inicio y en la grilla).
-const cachedSeries = unstable_cache(async (id: string) => withArtwork(await fetchSeries(id)), ["lacartoons-series-art"], { revalidate: CACHE_SECONDS });
+/** Serie con su arte, en caché un día (la usan la grilla, las páginas de la serie y la API). */
+export const cachedSeries = unstable_cache(async (id: string) => withArtwork(await fetchSeries(id)), ["lacartoons-series-art"], { revalidate: CACHE_SECONDS });
 
 /** Para comparar nombres: sin tildes, signos ni palabras de relleno ("La Serie Animada", "El", "Las"...). */
 function normalize(name: string): string {
