@@ -10,16 +10,28 @@ import FavoriteButton from "@/components/series/FavoriteButton";
 import PlayButton from "@/components/series/PlayButton";
 import EpisodeBrowser from "@/components/series/EpisodeBrowser";
 import StateMessage from "@/components/series/StateMessage";
+import { showById } from "@/data/shows";
+import LocalShowPage from "./LocalShowPage";
 
 type Params = Promise<{ id: string }>;
 
+type Search = Promise<{ ep?: string; vivo?: string }>;
+
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
-  const result = await loadSeries((await params).id);
+  const { id } = await params;
+  const local = showById[id];
+  if (local) return { title: `${local.title} — RetroToons` };
+  const result = await loadSeries(id);
   return { title: result.ok ? `${result.series.name} — RetroToons` : "Serie — RetroToons" };
 }
 
-export default async function SeriePage({ params }: { params: Params }) {
-  const result = await loadSeries((await params).id);
+export default async function SeriePage({ params, searchParams }: { params: Params; searchParams: Search }) {
+  const { id } = await params;
+  // Series que no están en LACartoons: se ven desde YouTube oficial / Pluto TV (biblioteca local).
+  const local = showById[id];
+  if (local) return <LocalShowPage show={local} query={await searchParams} />;
+
+  const result = await loadSeries(id);
 
   if (!result.ok) {
     if (result.code === "SERIES_NOT_FOUND" || result.code === "INVALID_ID") notFound();

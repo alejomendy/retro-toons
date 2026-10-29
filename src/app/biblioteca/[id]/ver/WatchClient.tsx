@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, ListVideo, Play, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, ListVideo, Minimize2, Play, X } from "lucide-react";
 import VideoPlayer from "@/components/VideoPlayer";
 import EpisodeBrowser from "@/components/series/EpisodeBrowser";
 import FavoriteButton from "@/components/series/FavoriteButton";
 import { episodeLabel, seriesHref, watchHref, type LcEpisode } from "@/lib/lacartoons-types";
 import { getSeriesProgress, isFinished, removeProgress, saveProgress } from "@/lib/user-library";
+import { theaterBand, theaterWidth, useTheaterMode } from "@/lib/use-theater";
+import { prefetchStreams } from "@/lib/prefetch-streams";
 
 const NEXT_COUNTDOWN_SECONDS = 8;
 
@@ -27,6 +29,7 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
   const next = index < videos.length - 1 ? videos[index + 1] : undefined;
 
   const [countdown, setCountdown] = useState<number | null>(null);
+  const [cinema, setCinema] = useTheaterMode();
   const [resumeAt, setResumeAt] = useState<number | null>(null);
 
   // Al entrar a un episodio sin ?t, ofrecer seguir desde donde quedó (localStorage solo en el cliente).
@@ -64,6 +67,13 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
     [episode.id, next],
   );
 
+  // Mientras se ve un episodio, se dejan listas las fuentes del siguiente.
+  useEffect(() => {
+    if (!next) return;
+    const timer = window.setTimeout(() => prefetchStreams(next.id), 15_000);
+    return () => window.clearTimeout(timer);
+  }, [next]);
+
   const goNext = useCallback(() => {
     if (!next) return;
     setCountdown(null);
@@ -89,9 +99,11 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
         <ArrowLeft className="size-4" /> {series.name}
       </Link>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      {/* Modo cine: el reproductor toma todo el ancho y la lista baja (mismo árbol: el video no se corta). */}
+      <div className={cinema ? "grid gap-6" : "grid gap-6 lg:grid-cols-[1fr_320px]"}>
         <section className="min-w-0 space-y-4">
-          <div className="relative">
+          <div className={cinema ? theaterBand : "relative"}>
+            <div className={cinema ? `relative ${theaterWidth}` : "contents"}>
             <VideoPlayer
               episodeId={episode.id}
               startAt={startAt}
@@ -125,6 +137,7 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
                 </div>
               </div>
             )}
+            </div>
           </div>
 
           {resumeAt !== null && (
@@ -154,7 +167,19 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
               <h1 className="font-display text-2xl leading-tight text-white sm:text-3xl">{episode.title}</h1>
               {episode.overview && <p className="mt-2 max-w-2xl text-white/75">{episode.overview}</p>}
             </div>
-            <FavoriteButton id={series.id} name={series.name} poster={series.poster} />
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setCinema(!cinema)}
+                aria-pressed={cinema}
+                title={cinema ? "Salir del modo cine (Esc)" : "Modo cine: agrandar el reproductor"}
+                className="chunky inline-flex items-center gap-2 rounded-xl bg-[#c9a36b] px-4 py-2.5 font-bold text-black transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+              >
+                {cinema ? <Minimize2 className="size-5" /> : <Clapperboard className="size-5" />}
+                {cinema ? "Achicar" : "Modo cine"}
+              </button>
+              <FavoriteButton id={series.id} name={series.name} poster={series.poster} />
+            </div>
           </div>
 
           <nav className="flex items-center justify-between gap-2 sm:gap-3" aria-label="Navegación entre episodios">

@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { NextResponse } from "next/server";
 import {
   isValidEpisodeId,
@@ -131,11 +132,20 @@ const mimeByKind: Record<LcStreamKind, string> = {
   unknown: "video/mp4",
 };
 
+/**
+ * Cuando el addon no logra extraer el video de un host (ej. cubeembed), a veces devuelve
+ * la primera petición que vio en la página, que es de analítica. Eso no es un video.
+ */
+const JUNK_HOSTS = /(^|\.)(mc\.yandex\.(ru|com)|google-analytics\.com|googletagmanager\.com|doubleclick\.net|facebook\.com|hotjar\.com)$/i;
+function isJunkUrl(url: string): boolean {
+  return JUNK_HOSTS.test(new URL(url).hostname);
+}
+
 function parseStream(v: unknown, index: number): LcStream | null {
   if (!isObj(v)) return null;
   // Solo URLs http(s): torrents (infoHash) o enlaces externos no se reproducen en el navegador.
   const url = httpUrl(v.url);
-  if (!url) return null;
+  if (!url || isJunkUrl(url)) return null;
   const hints = isObj(v.behaviorHints) ? v.behaviorHints : {};
   const proxy = isObj(hints.proxyHeaders) ? hints.proxyHeaders : null;
   const kind = streamKind(url);
@@ -227,3 +237,11 @@ export async function fetchGenres(): Promise<string[]> {
     return [];
   }
 }
+
+/**
+ * Fuentes con caché corta: las URLs firmadas duran horas, así que 15 min es seguro y
+ * evita esperar de nuevo al addon (que tarda 5-30 s) al volver a abrir un episodio.
+ */
+export const fetchStreamsCached = unstable_cache((episodeId: string) => fetchStreams(episodeId), ["lacartoons-streams"], {
+  revalidate: 15 * 60,
+});

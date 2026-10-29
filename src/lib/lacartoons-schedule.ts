@@ -1,10 +1,12 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
+import { after } from "next/server";
 import { channelById } from "@/data/channels";
 import { showById } from "@/data/shows";
 import { dayNumber, toMinutes } from "./schedule";
 import { getAvailableEpisodes, getFullEpisode, getPosters } from "./catalog";
-import { fetchCatalog, fetchSeries, LcError } from "./lacartoons";
+import { fetchCatalog, fetchSeries, fetchStreamsCached, LcError } from "./lacartoons";
+import { withArtwork } from "./artwork";
 import type { LcSeries, LcSeriesSummary, LcSlot } from "./lacartoons-types";
 import type { ChannelId, Show, VideoSource } from "./types";
 
@@ -50,7 +52,8 @@ const fullCatalog = unstable_cache(
   { revalidate: CACHE_SECONDS },
 );
 
-const cachedSeries = unstable_cache((id: string) => fetchSeries(id), ["lacartoons-series"], { revalidate: CACHE_SECONDS });
+// Con el póster de TMDB ya aplicado (se usa en la tele del inicio y en la grilla).
+const cachedSeries = unstable_cache(async (id: string) => withArtwork(await fetchSeries(id)), ["lacartoons-series-art"], { revalidate: CACHE_SECONDS });
 
 /** Para comparar nombres: sin tildes, signos ni palabras de relleno ("La Serie Animada", "El", "Las"...). */
 function normalize(name: string): string {
@@ -104,6 +107,54 @@ function shuffled<T>(list: T[], random: () => number): T[] {
 
 const unique = <T,>(list: T[]) => [...new Set(list)];
 
+/**
+ * ¿La serie tiene video que el navegador pueda reproducir? Se prueba un episodio (todos suelen estar en
+ * el mismo host) y el resultado se guarda 12 h. Si el addon no contesta a tiempo, se asume que sí
+ * (no se guarda) para no vaciar la grilla por un addon dormido.
+ */
+const playableCache = unstable_cache(
+  async (episodeId: string) => {
+    // La cola solo frena las consultas reales al addon; si ya está en caché, esto ni se ejecuta.
+    if (activeProbes >= MAX_PROBES) await new Promise<void>((resolve) => probeQueue.push(resolve));
+    activeProbes++;
+    try {
+      return (await fetchStreamsCached(episodeId)).length > 0;
+    } finally {
+      activeProbes--;
+      probeQueue.shift()?.();
+    }
+  },
+  ["lacartoons-playable"],
+  { revalidate: 12 * 60 * 60 },
+);
+
+/** Pocas consultas de fuentes a la vez: el addon (plan gratis) tiene muy poca CPU. */
+const MAX_PROBES = 4;
+let activeProbes = 0;
+const probeQueue: (() => void)[] = [];
+
+async function probe(series: LcSeries): Promise<boolean> {
+  try {
+    return await playableCache(series.videos[0].id);
+  } catch {
+    return true;
+  }
+}
+
+/** Tiempo máximo que la grilla espera las pruebas (Vercel corta a los 60 s y el addon puede tardar 30 s por episodio). */
+const PROBE_BUDGET_MS = 20_000;
+
+/**
+ * Prueba con tope de tiempo: lo que no termina a tiempo se da por reproducible en esta grilla
+ * y la prueba sigue después de responder (`after`), así la próxima visita ya la tiene en caché.
+ */
+function isPlayableWithin(series: LcSeries, deadline: number, pending: Promise<unknown>[]): Promise<boolean> {
+  const result = probe(series);
+  pending.push(result);
+  const left = Math.max(0, deadline - Date.now());
+  return Promise.race([result, new Promise<boolean>((resolve) => setTimeout(() => resolve(true), left))]);
+}
+
 export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<LcSlot[]> {
   const channel = channelById[channelId];
   const day = dayNumber(date);
@@ -113,10 +164,13 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
 
   // Series icónicas de cada bloque: las que están en LACartoons van por su ID;
   // las que no, quedan como candidatas a una fuente legal propia (ver lib/catalog.ts).
-  const blockKeys = channel.blocks.map((block) => {
+  /** Serie local de la que salió cada ID de LACartoons: si ahí no se puede ver, se prueba su fuente propia. */
+  const localOf = new Map<string, Show>();
+  let blockKeys = channel.blocks.map((block) => {
     const keys: string[] = [];
     for (const show of block.shows.map((id) => showById[id]).filter(Boolean)) {
       const found = findByName([show.lacartoons, show.title, show.originalTitle].filter((n): n is string => !!n), catalog);
+      if (found) localOf.set(found.id, show);
       keys.push(found ? found.id : `${EXTERNAL}${show.id}`);
     }
     for (const name of block.lacartoons ?? []) {
@@ -126,17 +180,31 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
     return unique(keys);
   });
 
-  // Solo sirven las que tienen episodios.
-  const iconicKeys = unique(blockKeys.flat());
+  // Solo sirven las que tienen episodios que se puedan reproducir.
   const loaded = new Map<string, LcSeries>();
+  const unplayable = new Set<string>();
+  const deadline = Date.now() + PROBE_BUDGET_MS;
+  const probes: Promise<unknown>[] = [];
+  after(() => Promise.allSettled(probes));
   const load = async (ids: string[]) => {
     const metas = await Promise.all(ids.map((id) => cachedSeries(id).catch(() => null)));
-    for (const s of metas) if (s && s.videos.length > 0) loaded.set(s.id, s);
+    await Promise.all(
+      metas.map(async (s) => {
+        if (!s || s.videos.length === 0) return;
+        if (await isPlayableWithin(s, deadline, probes)) loaded.set(s.id, s);
+        else unplayable.add(s.id);
+      }),
+    );
   };
+  await load(unique(blockKeys.flat()).filter((k) => !k.startsWith(EXTERNAL)));
+  // Las icónicas que LACartoons tiene pero sin video (ej. alojadas en hosts que el addon no extrae)
+  // pasan a buscarse en las fuentes legales propias.
+  blockKeys = blockKeys.map((keys) => unique(keys.map((k) => (unplayable.has(k) && localOf.has(k) ? `${EXTERNAL}${localOf.get(k)!.id}` : k))));
+  const iconicKeys = unique(blockKeys.flat());
+
   const external = new Map<string, { show: Show; numbers: number[] }>();
-  await Promise.all([
-    load(iconicKeys.filter((k) => !k.startsWith(EXTERNAL))),
-    ...iconicKeys
+  await Promise.all(
+    iconicKeys
       .filter((k) => k.startsWith(EXTERNAL))
       .map(async (key) => {
         const show = showById[key.slice(EXTERNAL.length)];
@@ -145,7 +213,7 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
         const numbers = await getAvailableEpisodes(show).catch(() => []);
         if (numbers.length > 0) external.set(key, { show, numbers });
       }),
-  ]);
+  );
   const playable = (key: string) => loaded.has(key) || external.has(key);
   let channelPool = iconicKeys.filter(playable);
 
@@ -251,4 +319,41 @@ function sourceName(source?: VideoSource): string {
     default:
       return "Fuente externa";
   }
+}
+
+export interface ExternalSeries {
+  id: string;
+  name: string;
+  poster: string | null;
+  year: number;
+}
+
+/**
+ * Series clásicas que no se pueden ver en LACartoons (no están, o están sin video)
+ * pero sí tienen episodios en fuentes legales propias (canales oficiales de YouTube, Pluto TV).
+ * Se muestran en la biblioteca y se abren en /biblioteca/<id local>.
+ */
+export async function getExternalSeries(): Promise<ExternalSeries[]> {
+  const catalog = (await fullCatalog()).map((series) => ({ series, key: normalize(series.name) }));
+  const deadline = Date.now() + PROBE_BUDGET_MS;
+  const probes: Promise<unknown>[] = [];
+  after(() => Promise.allSettled(probes));
+
+  const candidates = await Promise.all(
+    Object.values(showById).map(async (show) => {
+      const found = findByName([show.lacartoons, show.title, show.originalTitle].filter((n): n is string => !!n), catalog);
+      if (found) {
+        // Si en LACartoons se puede ver, no hace falta otra fuente.
+        const series = await cachedSeries(found.id).catch(() => null);
+        if (series && series.videos.length > 0 && (await isPlayableWithin(series, deadline, probes))) return null;
+      }
+      const numbers = await getAvailableEpisodes(show).catch(() => []);
+      return numbers.length > 0 ? show : null;
+    }),
+  );
+  const shows = candidates.filter((s): s is Show => !!s);
+  const posters = await getPosters(shows).catch((): Record<string, string> => ({}));
+  return shows
+    .map((s) => ({ id: s.id, name: s.title, poster: posters[s.id] ?? null, year: s.year }))
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }

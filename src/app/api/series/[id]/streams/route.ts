@@ -64,7 +64,7 @@
 // }
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchStreams, lcErrorResponse } from "@/lib/lacartoons";
+import { fetchStreamsCached, lcErrorResponse } from "@/lib/lacartoons";
 
 export const runtime = "nodejs";
 // El addon en el plan gratis de Render tarda hasta ~50 s en despertar.
@@ -78,7 +78,7 @@ type RouteContext = {
 export async function GET(_request: NextRequest, context: RouteContext) {
     try {
         const { id } = await context.params;
-        const streams = await fetchStreams(id);
+        const streams = await fetchStreamsCached(id);
         return NextResponse.json({ success: true, streams });
     } catch (error) {
         return lcErrorResponse(error, "streams");

@@ -4,9 +4,12 @@ import { fetchGenres } from "@/lib/lacartoons";
 import ContinueWatching from "@/components/series/ContinueWatching";
 import PageHeader, { SectionTitle } from "@/components/PageHeader";
 import BibliotecaClient from "./BibliotecaClient";
+import ExternalSeries, { ExternalSeriesSkeleton } from "./ExternalSeries";
 
 export const metadata: Metadata = { title: "Biblioteca — RetroToons" };
 export const dynamic = "force-dynamic";
+// La sección de otras fuentes prueba qué series se pueden ver (con tope de 20 s).
+export const maxDuration = 60;
 
 export default async function BibliotecaPage() {
   // Cadenas reales declaradas por el addon (si no responde, no se muestran esos filtros).
@@ -23,6 +26,9 @@ export default async function BibliotecaPage() {
           <BibliotecaClient genres={genres} />
         </Suspense>
       </section>
+      <Suspense fallback={<ExternalSeriesSkeleton />}>
+        <ExternalSeries />
+      </Suspense>
     </div>
   );
 }

@@ -18,6 +18,8 @@
 }
 
 body {
+  /* El modo cine usa franjas de ancho completo (w-screen): sin scroll horizontal por la barra. */
+  overflow-x: clip;
   background-color: var(--background);
   /* Patrón de lunares de alfombra de cine de los 90 */
   background-image:

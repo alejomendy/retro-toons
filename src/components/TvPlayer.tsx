@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clapperboard, Minimize2 } from "lucide-react";
 import type { VideoSource } from "@/lib/types";
+import { theaterBand, theaterWidth } from "@/lib/use-theater";
 
 interface Props {
   source?: VideoSource;
@@ -33,31 +34,17 @@ export default function TvPlayer({ source, title, subtitle, startAt = 0, badge, 
     [onCinemaChange],
   );
 
-  // Modo cine: Esc para salir y sin scroll de fondo mientras está activo.
+  // Al entrar al modo cine, la tele queda centrada en la ventana.
+  const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!cinema) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setCinema(false);
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = overflow;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [cinema, setCinema]);
+    if (cinema) rootRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [cinema]);
 
+  // Modo cine estilo YouTube: la tele se expande a todo el ancho de la página (no a pantalla completa).
   // Solo cambian las clases (no la estructura): el video sigue corriendo al entrar y salir.
   return (
-    <div
-      className={cinema ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-2 sm:p-6" : undefined}
-      onClick={cinema ? (e) => e.target === e.currentTarget && setCinema(false) : undefined}
-      role={cinema ? "dialog" : undefined}
-      aria-modal={cinema || undefined}
-      aria-label={cinema ? `Modo cine: ${title}` : undefined}
-    >
-      <div
-        className={`chunky rounded-[2rem] bg-[#3a2a1a] ${cinema ? "w-full max-w-[calc((100dvh-8.5rem)*16/9)] p-1.5 sm:p-4" : "p-3 sm:p-5"}`}
-      >
+    <div ref={rootRef} className={cinema ? theaterBand : undefined}>
+      <div className={`chunky rounded-[2rem] bg-[#3a2a1a] ${cinema ? `${theaterWidth} p-2 sm:p-4` : "p-3 sm:p-5"}`}>
         <div className="scanlines relative aspect-video overflow-hidden rounded-[1.5rem] bg-black shadow-[inset_0_0_60px_rgba(0,0,0,0.9)]">
           {overlay ?? <Screen source={source} title={title} subtitle={subtitle} startAt={startAt} fallback={fallback} />}
           {badge && (

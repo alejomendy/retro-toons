@@ -99,6 +99,56 @@ export async function findTmdb(originalTitle: string, year: number): Promise<{ i
   return hit ? { id: hit.id, poster: hit.poster_path ? `${IMG}/w342${hit.poster_path}` : null } : null;
 }
 
+/** Para comparar nombres de series: sin tildes, signos ni palabras de relleno. */
+function nameKey(name: string): string[] {
+  return name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w && !["el", "la", "los", "las", "de", "del", "y", "the", "and", "of", "serie", "series", "animada", "animated", "a"].includes(w));
+}
+
+/** Parecido entre dos nombres (0..1): palabras en común sobre el nombre más largo. */
+function similarity(a: string, b: string): number {
+  const x = new Set(nameKey(a));
+  const y = new Set(nameKey(b));
+  if (x.size === 0 || y.size === 0) return 0;
+  let common = 0;
+  for (const w of x) if (y.has(w)) common++;
+  return common / Math.max(x.size, y.size);
+}
+
+/** Géneros de TMDB: 16 animación, 10762 infantil. */
+const KIDS_GENRES = [16, 10762];
+
+/**
+ * Póster y fondo de TMDB para una serie de la que solo sabemos el nombre (ej. el de LACartoons).
+ * Solo acepta un resultado animado/infantil cuyo nombre se parezca de verdad: mejor sin imagen que con la de otra serie.
+ */
+export async function findTmdbArt(name: string, year?: number | null): Promise<{ poster: string | null; backdrop: string | null } | null> {
+  type Hit = { id: number; name: string; original_name: string; poster_path: string | null; backdrop_path: string | null; genre_ids: number[]; first_air_date?: string };
+  type Res = { results: Hit[] };
+  const query = name.replace(/\s*[:(].*$/, "").trim() || name;
+  const res = await tmdb<Res>("/search/tv", { query, language: LANG, include_adult: "false" });
+  const scored = (res?.results ?? [])
+    .filter((h) => h.poster_path && h.genre_ids.some((g) => KIDS_GENRES.includes(g)))
+    .map((h) => {
+      const score = Math.max(similarity(name, h.name), similarity(name, h.original_name), similarity(query, h.name), similarity(query, h.original_name));
+      const sameYear = year && h.first_air_date?.startsWith(String(year)) ? 0.15 : 0;
+      return { h, score: score + sameYear };
+    })
+    .filter((s) => s.score >= 0.6)
+    .sort((a, b) => b.score - a.score);
+  const hit = scored[0]?.h;
+  if (!hit) return null;
+  return {
+    poster: hit.poster_path ? `${IMG}/w342${hit.poster_path}` : null,
+    backdrop: hit.backdrop_path ? `${IMG}/w1280${hit.backdrop_path}` : null,
+  };
+}
+
 export async function findTmdbId(originalTitle: string, year: number): Promise<number | null> {
   return (await findTmdb(originalTitle, year))?.id ?? null;
 }

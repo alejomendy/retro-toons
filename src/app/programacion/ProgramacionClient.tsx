@@ -6,6 +6,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Play } from "lucide-react";
 import { channelById, channelNumber, channels } from "@/data/channels";
 import PageHeader from "@/components/PageHeader";
+import { useTheaterMode } from "@/lib/use-theater";
+import { prefetchStreams } from "@/lib/prefetch-streams";
 import TvPlayer, { NoSignal } from "@/components/TvPlayer";
 import VideoPlayer from "@/components/VideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
@@ -57,8 +59,14 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
   const current = now ? slots.find((s) => nowMin >= s.start && nowMin < s.end) : undefined;
   const currentIndex = current ? slots.indexOf(current) : -1;
   const upcoming = current ? slots.slice(currentIndex + 1, currentIndex + 4) : [];
+  // Faltando 5 minutos para el próximo programa, se dejan listas sus fuentes.
+  const nextUp = upcoming[0];
+  const nextSoon = !!nextUp && !nextUp.external && nextUp.start - nowMin <= 5;
+  useEffect(() => {
+    if (nextSoon && nextUp) prefetchStreams(nextUp.episode.id);
+  }, [nextSoon, nextUp]);
   // El modo cine se guarda acá para que no se apague cuando cambia el programa.
-  const [cinema, setCinema] = useState(false);
+  const [cinema, setCinema] = useTheaterMode();
 
   return (
     <div className="space-y-6">
@@ -70,7 +78,8 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
 
       <ChannelBanner channelId={channelId} />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+      {/* En modo cine la tele toma todo el ancho y la grilla pasa abajo (mismo árbol: el video no se corta). */}
+      <div className={cinema ? "grid gap-6" : "grid gap-6 lg:grid-cols-[1fr_360px]"}>
         <section className="min-w-0 space-y-4">
           {current && now ? (
             <LiveTv slot={current} now={now} next={upcoming[0]} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
