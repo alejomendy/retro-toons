@@ -2,7 +2,7 @@
 
 /**
  * Pide de antemano las fuentes de un episodio para que el servidor las tenga en caché
- * (15 min) cuando el usuario llegue: el addon tarda entre 5 y 30 s en buscarlas.
+ * (3 h) cuando el usuario llegue: el addon tarda entre 5 y 30 s en buscarlas.
  * No hace nada con la respuesta y nunca lo hace dos veces por episodio en la misma pestaña.
  */
 const requested = new Set<string>();

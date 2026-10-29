@@ -1,0 +1,19 @@
+# El plan gratis de Render duerme el addon tras 15 min sin uso y despertarlo tarda ~1 min
+# (la tele muestra "Sin señal" mientras tanto). Este ping cada 10 min lo mantiene despierto.
+# Un solo servicio despierto todo el mes entra en las 750 horas gratis de Render.
+name: Mantener despierto el addon
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping al manifiesto del addon
+        env:
+          ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-addon.onrender.com' }}
+        run: curl -fsS --max-time 120 -o /dev/null -w "%{http_code} en %{time_total}s\n" "$ADDON_URL/manifest.json"
