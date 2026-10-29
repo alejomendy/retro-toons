@@ -1,7 +1,7 @@
 import "server-only";
 import { unstable_cache } from "next/cache";
 import { after } from "next/server";
-import { channelById } from "@/data/channels";
+import { blocksForDay, channelById } from "@/data/channels";
 import { showById } from "@/data/shows";
 import { dayNumber, toMinutes } from "./schedule";
 import { getAvailableEpisodes, getFullEpisode, getPosters } from "./catalog";
@@ -109,7 +109,7 @@ const unique = <T,>(list: T[]) => [...new Set(list)];
 
 /**
  * ¿La serie tiene video que el navegador pueda reproducir? Se prueba un episodio (todos suelen estar en
- * el mismo host) y el resultado se guarda 12 h. Si el addon no contesta a tiempo, se asume que sí
+ * el mismo host) y el resultado se guarda 24 h. Si el addon no contesta a tiempo, se asume que sí
  * (no se guarda) para no vaciar la grilla por un addon dormido.
  */
 const playableCache = unstable_cache(
@@ -125,11 +125,11 @@ const playableCache = unstable_cache(
     }
   },
   ["lacartoons-playable-v2"],
-  { revalidate: 12 * 60 * 60 },
+  { revalidate: 24 * 60 * 60 },
 );
 
 /** Pocas consultas de fuentes a la vez: el addon (plan gratis) tiene muy poca CPU. */
-const MAX_PROBES = 4;
+const MAX_PROBES = 2;
 let activeProbes = 0;
 const probeQueue: (() => void)[] = [];
 
@@ -161,14 +161,16 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
   const random = seededRandom(hash(channelId) ^ day);
 
   const catalog = (await fullCatalog()).map((series) => ({ series, key: normalize(series.name) }));
+  // La programación cambia según el día de la semana (franjas de lunes a viernes, sábado y domingo).
+  const blocks = blocksForDay(channel, date.getDay());
 
   // Series icónicas de cada bloque: las que están en LACartoons van por su ID;
   // las que no, quedan como candidatas a una fuente legal propia (ver lib/catalog.ts).
   /** Serie local de la que salió cada ID de LACartoons: si ahí no se puede ver, se prueba su fuente propia. */
   const localOf = new Map<string, Show>();
-  let blockKeys = channel.blocks.map((block) => {
+  let blockKeys = blocks.map((block) => {
     const keys: string[] = [];
-    for (const show of block.shows.map((id) => showById[id]).filter(Boolean)) {
+    for (const show of (block.shows ?? []).map((id) => showById[id]).filter(Boolean)) {
       const found = findByName([show.lacartoons, show.title, show.originalTitle].filter((n): n is string => !!n), catalog);
       if (found) localOf.set(found.id, show);
       keys.push(found ? found.id : `${EXTERNAL}${show.id}`);
@@ -234,10 +236,11 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
   const pending: { slot: LcSlot; show: Show; number: number }[] = [];
   const airedToday = new Map<string, number>();
 
-  channel.blocks.forEach((block, b) => {
+  blocks.forEach((block, b) => {
     const own = blockKeys[b].filter(playable);
     // Con pocas series propias el bloque repetiría lo mismo durante horas: se suman las icónicas del canal.
-    const pool = own.length >= MIN_BLOCK_SERIES ? own : unique([...own, ...channelPool]);
+    // Las maratones (exclusive) pasan solo lo suyo.
+    const pool = own.length >= MIN_BLOCK_SERIES || (block.exclusive && own.length > 0) ? own : unique([...own, ...channelPool]);
     const length = block.slotMinutes ?? 30;
     const end = Math.min(toMinutes(block.end), DAY_MINUTES);
     // Cada día el bloque arranca por una serie distinta.

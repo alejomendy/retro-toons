@@ -24,6 +24,11 @@ RUN npm ci --omit=dev
 # Chromium de Playwright + librerías del sistema, de la misma versión que trae el lockfile.
 RUN npx playwright install --with-deps chromium
 
+# Ajustes para entrar en los 512 MB del plan gratis (Chromium liviano, una página a la vez).
+COPY patch-low-memory.js /tmp/patch-low-memory.js
+RUN node /tmp/patch-low-memory.js addon.js && node --check addon.js
+
 ENV NODE_ENV=production
+ENV NODE_OPTIONS=--max-old-space-size=160
 EXPOSE 10000
 CMD ["node", "addon.js"]

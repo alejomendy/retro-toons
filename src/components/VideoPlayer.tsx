@@ -217,15 +217,20 @@ export default function VideoPlayer({
             setSelectedStream(null);
 
             try {
-                const response = await fetch(
-                    `/api/series/${encodeURIComponent(episodeId)}/streams`,
-                    {
+                const request = () =>
+                    fetch(`/api/series/${encodeURIComponent(episodeId)}/streams`, {
                         cache: "no-store",
                         signal: controller.signal,
-                    }
-                );
+                    });
 
-                const data: unknown = await response.json().catch(() => null);
+                let response = await request();
+                let data: unknown = await response.json().catch(() => null);
+                // El addon (plan gratis) a veces tarda de más cuando está ocupado: un reintento suele alcanzar.
+                if (response.status === 502 && (data as { code?: string } | null)?.code === "ADDON_UNREACHABLE") {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                    response = await request();
+                    data = await response.json().catch(() => null);
+                }
                 const body = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : {};
 
                 if (!response.ok || body.success !== true) {

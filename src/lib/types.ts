@@ -1,4 +1,4 @@
-export type ChannelId = "cartoon-network" | "nickelodeon" | "disney-xd" | "jetix" | "fox-kids";
+export type ChannelId = "cartoon-network" | "nickelodeon" | "jetix" | "disney" | "warner" | "fox";
 
 export interface Channel {
   id: ChannelId;
@@ -22,10 +22,14 @@ export interface ScheduleBlock {
   start: string;
   /** "HH:MM" — "24:00" para fin del día. */
   end: string;
-  /** Series que rotan dentro del bloque. */
-  shows: string[];
-  /** Clásicos extra del bloque, por su nombre en el catálogo de LACartoons. */
+  /** Series locales (data/shows.ts) del bloque: se ven desde otras fuentes legales si LACartoons no las tiene. */
+  shows?: string[];
+  /** Series del bloque, por su nombre en el catálogo de LACartoons. */
   lacartoons?: string[];
+  /** Días en que va el bloque (0 = domingo … 6 = sábado). Sin esto, todos los días. */
+  days?: number[];
+  /** Maratón: el bloque pasa solo sus series aunque sean pocas (no se completa con otras del canal). */
+  exclusive?: boolean;
   /** Duración de cada espacio en minutos (por defecto 30). */
   slotMinutes?: number;
 }

@@ -43,7 +43,7 @@ const MIN_SHOWS = 5;
 
 /** Series que pueden aparecer en un canal: las de sus bloques y las que se emitieron en él. */
 export function scheduleCandidates(channelId: ChannelId): string[] {
-  const fromBlocks = channelById[channelId].blocks.flatMap((b) => b.shows);
+  const fromBlocks = channelById[channelId].blocks.flatMap((b) => b.shows ?? []);
   const aired = Object.values(showById).filter((s) => s.channels.includes(channelId)).map((s) => s.id);
   return [...new Set([...fromBlocks, ...aired])];
 }
@@ -73,7 +73,8 @@ export function getDaySchedule(channelId: ChannelId, date: Date, available?: Rec
   const filter = !!available && channelPool.length > 0;
 
   const pools = channel.blocks.map((block) => {
-    const inBlock = filter ? block.shows.filter(playable) : block.shows;
+    const shows = block.shows ?? [];
+    const inBlock = filter ? shows.filter(playable) : shows;
     // Un bloque con una sola serie disponible repetiría lo mismo horas: mejor todo el canal.
     return !filter || new Set(inBlock).size >= 2 ? inBlock : channelPool;
   });

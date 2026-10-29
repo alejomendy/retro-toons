@@ -105,7 +105,7 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
           {current && now && <NowNext current={current} upcoming={upcoming} now={now} />}
         </section>
 
-        <ScheduleList slots={slots} current={current} now={now} loading={!loaded} />
+        <WeekGuide channelId={channelId} now={now} todaySlots={slots} current={current} loading={!loaded} />
       </div>
     </div>
   );
@@ -330,23 +330,115 @@ function Bumper({ channelName, color, ink, next }: { channelName: string; color:
   );
 }
 
-function ScheduleList({ slots, current, now, loading }: { slots: LcSlot[]; current?: LcSlot; now: Date | null; loading: boolean }) {
+const WEEKDAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+
+/**
+ * Guía semanal: pestañas de lunes a domingo de esta semana. Hoy usa la grilla que ya está
+ * cargada (la de la tele); los otros días se piden al elegirlos.
+ */
+function WeekGuide({ channelId, now, todaySlots, current, loading }: { channelId: ChannelId; now: Date | null; todaySlots: LcSlot[]; current?: LcSlot; loading: boolean }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [other, setOther] = useState<{ key: string; slots: LcSlot[] | null }>({ key: "", slots: null });
+
+  const today = now ? toDateParam(now) : null;
+  // Lunes a domingo de la semana actual.
+  const week = now
+    ? Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(now.getDate() - ((now.getDay() + 6) % 7) + i);
+        return d;
+      })
+    : [];
+  const day = selected && selected !== today ? selected : today;
+  const isToday = day === today;
+  const otherKey = `${channelId}|${day}`;
+
+  useEffect(() => {
+    if (isToday || !day) return;
+    const controller = new AbortController();
+    setOther({ key: otherKey, slots: null });
+    fetch(`/api/programacion?canal=${channelId}&fecha=${day}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((data: { success?: boolean; slots?: LcSlot[] }) => setOther({ key: otherKey, slots: data.success && data.slots ? data.slots : [] }))
+      .catch(() => {
+        if (!controller.signal.aborted) setOther({ key: otherKey, slots: [] });
+      });
+    return () => controller.abort();
+  }, [channelId, day, isToday, otherKey]);
+
+  const otherReady = other.key === otherKey && other.slots !== null;
+  const tabs = (
+    <div className="flex gap-1 overflow-x-auto border-b-4 border-black bg-black/60 px-2 py-1.5" role="tablist" aria-label="Días de la semana">
+      {week.map((d) => {
+        const key = toDateParam(d);
+        const active = key === day;
+        return (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => setSelected(key)}
+            className={`shrink-0 rounded-md px-2 py-0.5 font-mono text-lg leading-tight transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              active ? "bg-accent text-black" : "text-white/70 hover:bg-white/10 hover:text-white"
+            }`}
+          >
+            {key === today ? "Hoy" : WEEKDAYS[d.getDay()]}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const dateLabel = day ? new Date(`${day}T12:00:00`).toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short" }) : "--";
+  return (
+    <ScheduleList
+      title={isToday ? "Grilla de hoy" : "Grilla del día"}
+      dateLabel={dateLabel}
+      tabs={tabs}
+      slots={isToday ? todaySlots : (other.slots ?? [])}
+      current={isToday ? current : undefined}
+      now={isToday ? now : null}
+      loading={isToday ? loading : !otherReady}
+    />
+  );
+}
+
+function ScheduleList({
+  slots,
+  current,
+  now,
+  loading,
+  title,
+  dateLabel,
+  tabs,
+}: {
+  slots: LcSlot[];
+  current?: LcSlot;
+  now: Date | null;
+  loading: boolean;
+  title: string;
+  dateLabel: string;
+  tabs?: React.ReactNode;
+}) {
   const listRef = useRef<HTMLOListElement>(null);
   const currentStart = current?.start;
 
   useEffect(() => {
     const el = listRef.current?.querySelector<HTMLElement>("[data-current='true']");
     if (el && listRef.current) listRef.current.scrollTop = el.offsetTop - 80;
+    else if (listRef.current) listRef.current.scrollTop = 0;
   }, [currentStart, slots]);
 
   const nowMin = now ? minutesNow(now) : 0;
 
   return (
-    <aside className="chunky flex max-h-[640px] flex-col overflow-hidden rounded-xl bg-panel">
+    <aside className="chunky flex max-h-[680px] flex-col overflow-hidden rounded-xl bg-panel">
       <div className="flex items-center justify-between border-b-4 border-black bg-black px-4 py-2">
-        <h2 className="font-display text-lg text-accent">Grilla de hoy</h2>
-        <span className="font-mono text-xl text-white">{now ? now.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short" }) : "--"}</span>
+        <h2 className="font-display text-lg text-accent">{title}</h2>
+        <span className="font-mono text-xl text-white">{dateLabel}</span>
       </div>
+      {tabs}
       <ol ref={listRef} className="relative flex-1 overflow-y-auto">
         {loading &&
           Array.from({ length: 8 }, (_, i) => (
