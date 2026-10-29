@@ -1,118 +1,158 @@
 import "server-only";
 import { showById } from "@/data/shows";
 import { getDaySchedule, getEpisode, getEpisodes } from "@/lib/schedule";
-import { getTvmazeShow, type TvmazeEpisode, type TvmazeShow } from "@/lib/tvmaze";
 import { findTmdb, findTmdbId, getTmdbSeason, getTmdbShow, type TmdbEpisode, type TmdbShow } from "@/lib/tmdb";
-import { getWikipediaSummary } from "@/lib/wikipedia";
+import { getWikipediaEpisodes, getWikipediaSummary, type WikiEpisode } from "@/lib/wikipedia";
+import { normalize } from "@/lib/text";
+import { getDoblajeTitles } from "@/lib/doblaje";
+import { fanWikiUrl, getFanWikiTitles } from "@/lib/fanwiki";
 import { findYoutubeVideo } from "@/lib/youtube";
 import { findDailymotionVideo } from "@/lib/dailymotion";
 import type { ChannelId, Episode, Show, ShowExtras, Slot, VideoSource } from "@/lib/types";
 
 /**
- * Une el catálogo local con las APIs externas, priorizando español latino:
- *   - TMDB (es-MX) → títulos y sinopsis en español, pósters, fondos, openings, dónde ver.
- *   - Wikipedia ES → descripción en español si no hay TMDB.
- *   - TVmaze       → estructura de temporadas/episodios y respaldo en inglés.
+ * Une el catálogo local con las APIs externas. Todo lo que se muestra está en español,
+ * priorizando el doblaje latino:
+ *   - TMDB → temporadas, pósters, dónde ver, y títulos/sinopsis en es-MX.
+ *   - Wikis de fans (configuradas por serie) y Doblaje Wiki → títulos latinos que TMDB no tiene en es-MX.
+ *   - Wikipedia ES → descripción de la serie y títulos/sinopsis de sus anexos de episodios.
+ *   - TMDB es-ES (España) → último recurso.
  *   - YouTube / Dailymotion → fuente de video si no hay una en data/videos.ts.
- * Si una API falla, se usa lo que haya y el sitio sigue funcionando.
+ * Si un episodio no tiene título en español en ninguna fuente, se muestra
+ * "Temporada X · Episodio Y" (nunca el título en inglés).
  */
 
-interface Sources {
-  tv: TvmazeShow | null;
-  tmdb: TmdbShow | null;
+async function loadTmdb(show: Show): Promise<TmdbShow | null> {
+  const id = show.tmdbId ?? (await findTmdbId(show.originalTitle, show.year));
+  return id ? getTmdbShow(id) : null;
 }
 
-async function loadSources(show: Show): Promise<Sources> {
-  const [tv, tmdbId] = await Promise.all([
-    show.tvmazeId ? getTvmazeShow(show.tvmazeId) : null,
-    show.tmdbId ?? findTmdbId(show.originalTitle, show.year),
-  ]);
-  return { tv, tmdb: tmdbId ? await getTmdbShow(tmdbId) : null };
+/** Número absoluto (1..N) → temporada y episodio según las temporadas de TMDB. */
+function locate(tmdb: TmdbShow, n: number): { season: number; index: number } | null {
+  let rest = n;
+  for (const s of tmdb.seasons) {
+    if (rest <= s.episodeCount) return { season: s.number, index: rest - 1 };
+    rest -= s.episodeCount;
+  }
+  return null;
 }
 
-const key = (season: number, number: number) => `${season}x${number}`;
-
-/**
- * Títulos en español de TMDB indexados por temporada×episodio.
- * Solo usa temporadas con la misma cantidad de episodios que TVmaze: algunas
- * series cuentan segmentos de 11 min y otras episodios de 22, y no queremos
- * mostrar el título de otro episodio.
- */
-async function spanishEpisodes({ tv, tmdb }: Sources, onlySeasons?: Set<number>): Promise<Map<string, TmdbEpisode>> {
-  const map = new Map<string, TmdbEpisode>();
-  if (!tv || !tmdb) return map;
-
-  const tvCounts = new Map<number, number>();
-  for (const e of tv.episodes) tvCounts.set(e.season, (tvCounts.get(e.season) ?? 0) + 1);
-
-  const seasons = tmdb.seasons.filter(
-    (s) => tvCounts.get(s.number) === s.episodeCount && (!onlySeasons || onlySeasons.has(s.number)),
-  );
-  const results = await Promise.all(seasons.map((s) => getTmdbSeason(tmdb.id, s.number)));
-  for (const e of results.flat()) map.set(key(e.season, e.number), e);
-  return map;
-}
-
-/** TMDB devuelve "Episodio N" cuando no hay traducción: lo tratamos como vacío. */
-function usefulName(name?: string | null): string | null {
-  return name && !/^Episodio \d+$/i.test(name) ? name : null;
-}
-
-function mergeEpisode(base: Episode, tv?: TvmazeEpisode, es?: TmdbEpisode): Episode {
-  if (!tv) return base;
-  const name = usefulName(es?.name) ?? tv.name;
+function toEpisode(base: Episode, t?: TmdbEpisode): Episode {
+  if (!t) return base;
   return {
     ...base,
-    title: `T${tv.season}·E${tv.number} — ${name}`,
-    minutes: tv.runtime && tv.runtime <= 30 ? tv.runtime : base.minutes,
-    season: tv.season,
-    numberInSeason: tv.number,
-    airdate: tv.airdate || undefined,
-    summary: es?.overview ?? tv.summary ?? undefined,
-    image: es?.still ?? tv.image ?? undefined,
+    title: t.name ? `T${t.season}·E${t.number} — ${t.name}` : `Temporada ${t.season} · Episodio ${t.number}`,
+    minutes: t.runtime && t.runtime <= 30 ? t.runtime : base.minutes,
+    season: t.season,
+    numberInSeason: t.number,
+    airdate: t.airDate ?? undefined,
+    summary: t.overview ?? undefined,
+    image: t.still ?? undefined,
   };
 }
 
-function seasonOf(tv: TvmazeShow | null, n: number): Set<number> {
-  const ep = tv?.episodes[n - 1];
-  return new Set(ep ? [ep.season] : []);
+/**
+ * Busca un episodio por su título original en un índice (título original normalizado → dato).
+ * Si no está entero prueba por segmentos ("A / B"), que algunas fuentes listan por separado.
+ */
+function lookup<T>(index: Map<string, T>, originalName: string, join: (parts: T[]) => T): T | null {
+  const direct = index.get(normalize(originalName));
+  if (direct) return direct;
+  const parts = originalName.split("/").map((p) => index.get(normalize(p)));
+  return parts.length > 1 && parts.every(Boolean) ? join(parts as T[]) : null;
+}
+
+/** "Los Sustitutos" → también "Los sustitutos" (los títulos de las wikis distinguen mayúsculas). */
+function nameVariants(names: (string | null | undefined)[]): string[] {
+  const clean = names.filter((n): n is string => !!n);
+  return [...new Set(clean.flatMap((n) => [n, n.charAt(0) + n.slice(1).toLowerCase()]))];
+}
+
+interface EpisodeData {
+  episodes: Map<number, TmdbEpisode>;
+  credits: { name: string; url: string }[];
+}
+
+/**
+ * Trae las temporadas necesarias y devuelve el episodio de cada número absoluto,
+ * con el mejor título en español disponible:
+ * TMDB es-MX → wiki de fans → Doblaje Wiki → Wikipedia ES → TMDB es-ES → wiki de fans (España).
+ */
+async function tmdbEpisodes(show: Show, tmdb: TmdbShow | null, numbers: number[]): Promise<EpisodeData> {
+  const episodes = new Map<number, TmdbEpisode>();
+  if (!tmdb) return { episodes, credits: [] };
+  const located = numbers.map((n) => [n, locate(tmdb, n)] as const);
+  const seasons = [...new Set(located.flatMap(([, l]) => (l ? [l.season] : [])))];
+  const data = new Map(await Promise.all(seasons.map(async (s) => [s, await getTmdbSeason(tmdb.id, s)] as const)));
+  for (const [n, l] of located) {
+    const ep = l ? data.get(l.season)?.[l.index] : undefined;
+    if (ep) episodes.set(n, { ...ep });
+  }
+
+  const credits = new Map<string, string>();
+  const incomplete = [...episodes.values()].filter((e) => !e.name || !e.overview);
+  if (incomplete.length > 0) {
+    const names = nameVariants([show.title, tmdb.name, show.originalTitle]);
+    const originals = incomplete.flatMap((e) => (e.originalName ? [e.originalName, ...e.originalName.split("/")] : []));
+    const [fan, doblaje, wiki] = await Promise.all([
+      show.fanWiki ? getFanWikiTitles(show.fanWiki, originals) : null,
+      getDoblajeTitles(names),
+      getWikipediaEpisodes(names),
+    ]);
+    const joinTitles = (p: string[]) => p.join(" / ");
+    for (const e of incomplete) {
+      const original = e.originalName;
+      const fromFan = original && fan ? lookup(fan.latino, original, joinTitles) : null;
+      const fromDoblaje = original ? lookup(doblaje.titles, original, joinTitles) : null;
+      const w = original
+        ? lookup<WikiEpisode>(wiki, original, (p) => ({ title: p.map((x) => x.title).join(" / "), summary: p.map((x) => x.summary).filter(Boolean).join(" ") || null }))
+        : null;
+      // Nunca aceptar algo idéntico al inglés.
+      const wikiTitle = w && original && normalize(w.title) !== normalize(original) ? w.title : null;
+      const fanSpain = original && fan ? lookup(fan.spain, original, joinTitles) : null;
+
+      if (!e.name && (fromFan || (!fromDoblaje && !wikiTitle && !e.nameSpain && fanSpain)) && show.fanWiki) {
+        credits.set("Wiki de fans (CC BY-SA)", fanWikiUrl(show.fanWiki));
+      } else if (!e.name && fromDoblaje && doblaje.url) {
+        credits.set("Doblaje Wiki (CC BY-SA)", doblaje.url);
+      }
+      e.name ??= fromFan ?? fromDoblaje ?? wikiTitle ?? e.nameSpain ?? fanSpain;
+      e.overview ??= w?.summary ?? e.overviewSpain;
+    }
+  } else {
+    for (const e of episodes.values()) e.overview ??= e.overviewSpain;
+  }
+  return { episodes, credits: [...credits].map(([name, url]) => ({ name, url })) };
 }
 
 export async function getShowWithEpisodes(show: Show): Promise<{ show: Show; extras: ShowExtras; episodes: Episode[] }> {
-  const [sources, wiki] = await Promise.all([loadSources(show), getWikipediaSummary(`${show.title} serie animada`)]);
-  const { tv, tmdb } = sources;
-  const es = await spanishEpisodes(sources);
+  const [tmdb, wiki] = await Promise.all([loadTmdb(show), getWikipediaSummary(`${show.title} serie animada`)]);
+  const base = getEpisodes(show);
+  const { episodes: eps, credits } = await tmdbEpisodes(show, tmdb, base.map((e) => e.number));
+  const episodes = base.map((e) => toEpisode(e, eps.get(e.number)));
 
-  const episodes = getEpisodes(show).map((e) => {
-    const t = tv?.episodes[e.number - 1];
-    return mergeEpisode(e, t, t ? es.get(key(t.season, t.number)) : undefined);
-  });
-
-  const summary = tmdb?.overview ?? wiki?.extract ?? tv?.summary ?? null;
   const extras: ShowExtras = {
     localTitle: tmdb?.name ?? null,
-    summary,
-    summarySource: tmdb?.overview ? "tmdb" : wiki?.extract ? "wikipedia" : tv?.summary ? "tvmaze" : null,
-    image: tmdb?.poster ?? tv?.image ?? wiki?.image ?? null,
+    summary: tmdb?.overview ?? wiki?.extract ?? null,
+    summarySource: tmdb?.overview ? "tmdb" : wiki?.extract ? "wikipedia" : null,
+    image: tmdb?.poster ?? wiki?.image ?? null,
     backdrop: tmdb?.backdrop ?? null,
-    network: tv?.network ?? null,
     videos: tmdb?.videos ?? [],
     providers: tmdb?.providers ?? [],
     providersLink: tmdb?.providersLink ?? null,
     wikipediaUrl: wiki?.url ?? null,
+    credits,
     tmdbId: tmdb?.id ?? null,
   };
   return { show, extras, episodes };
 }
 
 export async function getFullEpisode(show: Show, number: number): Promise<Episode> {
-  const sources = await loadSources(show);
-  const es = await spanishEpisodes(sources, seasonOf(sources.tv, number));
-  const t = sources.tv?.episodes[number - 1];
-  const esEp = t ? es.get(key(t.season, t.number)) : undefined;
-  const episode = mergeEpisode(getEpisode(show, number), t, esEp);
-  const episodeNames = [usefulName(esEp?.name), t?.name].filter((n): n is string => !!n);
-  return { ...episode, source: await resolveSource(show, episode, sources.tmdb?.name, episodeNames) };
+  const tmdb = await loadTmdb(show);
+  const t = (await tmdbEpisodes(show, tmdb, [number])).episodes.get(number);
+  const episode = toEpisode(getEpisode(show, number), t);
+  const episodeNames = [t?.name, t?.originalName].filter((n): n is string => !!n);
+  return { ...episode, source: await resolveSource(show, episode, tmdb?.name, episodeNames) };
 }
 
 /** 1) data/videos.ts  2) YouTube  3) Dailymotion  4) sin fuente. */
@@ -123,9 +163,10 @@ export async function resolveSource(
   episodeNames: string[] = [],
 ): Promise<VideoSource | undefined> {
   if (episode.source) return episode.source;
+  // Sin ningún nombre de episodio no hay forma de verificar que el video sea el correcto.
+  if (episodeNames.length === 0) return undefined;
   const series = localTitle ?? show.title;
-  const name = episodeNames[0] ?? `capítulo ${episode.number}`;
-  const query = `${series} ${name} español latino`;
+  const query = `${series} ${episodeNames[0]} español latino`;
   // El video tiene que nombrar la serie y el episodio para no pasar un capítulo equivocado.
   const names = [show.title, show.originalTitle, ...(localTitle ? [localTitle] : [])];
   return (await findYoutubeVideo(query, names, episodeNames)) ?? (await findDailymotionVideo(query, names, episodeNames));
@@ -139,24 +180,17 @@ export async function getEnrichedSchedule(channelId: ChannelId, date: Date): Pro
   const data = new Map(
     await Promise.all(
       ids.map(async (id) => {
-        const show = showById[id];
-        const sources = await loadSources(show);
-        const seasons = new Set(
-          slots.filter((s) => s.show.id === id).flatMap((s) => [...seasonOf(sources.tv, s.episode.number)]),
-        );
-        return [id, { tv: sources.tv, es: await spanishEpisodes(sources, seasons) }] as const;
+        const tmdb = await loadTmdb(showById[id]);
+        const numbers = slots.filter((s) => s.show.id === id).map((s) => s.episode.number);
+        return [id, await tmdbEpisodes(showById[id], tmdb, numbers)] as const;
       }),
     ),
   );
 
-  return slots.map((s) => {
-    const d = data.get(s.show.id);
-    const t = d?.tv?.episodes[s.episode.number - 1];
-    return { ...s, episode: mergeEpisode(s.episode, t, t ? d?.es.get(key(t.season, t.number)) : undefined) };
-  });
+  return slots.map((s) => ({ ...s, episode: toEpisode(s.episode, data.get(s.show.id)?.episodes.get(s.episode.number)) }));
 }
 
-/** Pósters de TMDB para la grilla de la biblioteca (solo TMDB: TVmaze limita a 20 req/10 s). */
+/** Pósters de TMDB para la grilla de la biblioteca. */
 export async function getPosters(list: Show[]): Promise<Record<string, string>> {
   const entries = await Promise.all(
     list.map(async (s) => {

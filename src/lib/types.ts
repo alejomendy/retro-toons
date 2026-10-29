@@ -29,12 +29,12 @@ export interface ScheduleBlock {
 export interface Show {
   id: string;
   title: string;
-  /** Título original en inglés (para buscar en TVmaze/YouTube). */
+  /** Título original en inglés (para buscar en TMDB/YouTube; no se muestra como título principal). */
   originalTitle: string;
-  /** ID de la serie en https://www.tvmaze.com */
-  tvmazeId?: number;
   /** ID en TMDB. Si falta se busca por título original + año. */
   tmdbId?: number;
+  /** Wiki de fans con títulos latinos de episodios (ver lib/fanwiki.ts). */
+  fanWiki?: FanWiki;
   channels: ChannelId[];
   /** Año de estreno. */
   year: number;
@@ -63,7 +63,7 @@ export interface Episode {
   title: string;
   minutes: number;
   source?: VideoSource;
-  /** Datos de TVmaze cuando están disponibles. */
+  /** Datos de TMDB cuando están disponibles. */
   season?: number;
   numberInSeason?: number;
   airdate?: string;
@@ -71,22 +71,23 @@ export interface Episode {
   image?: string;
 }
 
-/** Info extra de la serie traída de las APIs (TMDB → Wikipedia → TVmaze). */
+/** Info extra de la serie traída de las APIs (TMDB → Wikipedia), siempre en español. */
 export interface ShowExtras {
   /** Título en español latino según TMDB. */
   localTitle: string | null;
   summary: string | null;
   /** De dónde salió la sinopsis, para la atribución. */
-  summarySource: "tmdb" | "wikipedia" | "tvmaze" | null;
+  summarySource: "tmdb" | "wikipedia" | null;
   image: string | null;
   backdrop: string | null;
-  network: string | null;
   /** Openings/trailers en YouTube (claves de video). */
   videos: { key: string; name: string; type: string }[];
   /** Plataformas donde verla legalmente en la región configurada. */
   providers: { name: string; logo: string }[];
   providersLink: string | null;
   wikipediaUrl: string | null;
+  /** Wikis de las que salieron títulos de episodios (para la atribución). */
+  credits: { name: string; url: string }[];
   tmdbId: number | null;
 }
 
@@ -96,4 +97,12 @@ export interface Slot {
   block: string;
   show: Show;
   episode: Episode;
+}
+
+/** Wiki de fans en Fandom (español) con una lista de episodios. */
+export interface FanWiki {
+  /** Subdominio de Fandom, ej. "tortugasninja" → tortugasninja.fandom.com/es */
+  wiki: string;
+  /** Página con la lista de episodios. */
+  page: string;
 }

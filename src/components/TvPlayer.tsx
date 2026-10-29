@@ -105,7 +105,7 @@ export function NoSignal({ title, subtitle }: { title: string; subtitle?: string
         <div className="rounded-lg bg-black/75 px-6 py-4">
           <p className="font-display text-xl text-white sm:text-3xl">{title}</p>
           {subtitle && <p className="font-mono text-xl text-accent sm:text-2xl">{subtitle}</p>}
-          <p className="mt-2 font-mono text-lg text-white/60">SIN SEÑAL · cargá el video en src/data/videos.ts</p>
+          <p className="mt-2 font-mono text-lg text-white/60">SIN SEÑAL · Este episodio todavía no está disponible</p>
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
   }, []);
 
   const dateKey = now?.toDateString();
-  // Grilla local al instante; se reemplaza por la de /api/programacion (con títulos de TVmaze) cuando llega.
+  // Grilla local al instante; se reemplaza por la de /api/programacion (con títulos en español de TMDB) cuando llega.
   const localSlots = useMemo(() => (now ? getDaySchedule(channelId, now) : []), [channelId, dateKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const [remote, setRemote] = useState<{ key: string; slots: Slot[] } | null>(null);
   const scheduleKey = `${channelId}|${dateKey}`;

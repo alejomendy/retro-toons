@@ -46,7 +46,7 @@ export default async function ShowPage({ params, searchParams }: { params: Param
           {(episode.summary || episode.airdate) && (
             <div className="chunky rounded-xl bg-panel p-4">
               <p className="font-display text-lg text-white">{episode.title}</p>
-              {episode.airdate && <p className="font-mono text-xl text-white/60">Emitido el {episode.airdate}</p>}
+              {episode.airdate && <p className="font-mono text-xl text-white/60">Emitido el {formatAirdate(episode.airdate)}</p>}
               {episode.summary && <p className="mt-1 text-sm text-white/80">{episode.summary}</p>}
             </div>
           )}
@@ -62,16 +62,15 @@ export default async function ShowPage({ params, searchParams }: { params: Param
             )}
             <div className="relative space-y-2 p-4">
               <h1 className="font-display text-2xl text-accent">{show.title}</h1>
-              <p className="text-sm italic text-white/60">
-                {show.originalTitle}
-                {extras.localTitle && extras.localTitle !== show.title && ` · En Latinoamérica: ${extras.localTitle}`}
-              </p>
+              {extras.localTitle && extras.localTitle.toLowerCase() !== show.title.toLowerCase() && (
+                <p className="text-sm italic text-white/60">También conocida como: {extras.localTitle}</p>
+              )}
               <div className="flex flex-wrap gap-1">{show.channels.map((c) => <ChannelBadge key={c} id={c} />)}</div>
               <p className="font-mono text-xl text-white/70">
                 {show.year} · {show.genre} · {show.seasons} temporadas · {show.episodeCount} episodios
               </p>
               <p>{show.description}</p>
-              {extras.summary && <p className="text-sm text-white/70" lang={extras.summarySource === "tvmaze" ? "en" : "es"}>{extras.summary}</p>}
+              {extras.summary && <p className="text-sm text-white/70">{extras.summary}</p>}
             </div>
           </div>
 
@@ -96,7 +95,7 @@ export default async function ShowPage({ params, searchParams }: { params: Param
 
           {extras.videos.length > 0 && (
             <div className="chunky rounded-xl bg-panel p-4">
-              <h2 className="font-display text-lg text-white">Openings y trailers</h2>
+              <h2 className="font-display text-lg text-white">Presentaciones y avances</h2>
               <ul className="mt-2 grid gap-3 sm:grid-cols-2">
                 {extras.videos.slice(0, 4).map((v) => (
                   <li key={v.key}>
@@ -124,9 +123,9 @@ export default async function ShowPage({ params, searchParams }: { params: Param
             {extras.wikipediaUrl && (
               <a href={extras.wikipediaUrl} target="_blank" rel="noreferrer" className="underline">Wikipedia (CC BY-SA)</a>
             )}
-            {show.tvmazeId && (
-              <a href={`https://www.tvmaze.com/shows/${show.tvmazeId}`} target="_blank" rel="noreferrer" className="underline">TVmaze (CC BY-SA)</a>
-            )}
+            {extras.credits.map((c) => (
+              <a key={c.url} href={c.url} target="_blank" rel="noreferrer" className="underline">{c.name}</a>
+            ))}
           </p>
         </section>
 
@@ -164,4 +163,10 @@ function EpisodeNav({ show, target, disabled, children }: { show: string; target
   const cls = "chunky inline-flex items-center gap-1 rounded-lg bg-white px-3 py-1.5 font-bold text-black";
   if (disabled) return <span className={`${cls} pointer-events-none opacity-40`}>{children}</span>;
   return <Link href={`/biblioteca/${show}?ep=${target}`} scroll={false} className={cls}>{children}</Link>;
+}
+
+/** "1996-04-28" → "28 de abril de 1996" */
+function formatAirdate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("es-419", { day: "numeric", month: "long", year: "numeric" });
 }
