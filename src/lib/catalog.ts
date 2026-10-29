@@ -1,7 +1,6 @@
 import "server-only";
-import { showById } from "@/data/shows";
 import { videoSources } from "@/data/videos";
-import { getDaySchedule, getEpisode, getEpisodes } from "@/lib/schedule";
+import { getEpisode, getEpisodes } from "@/lib/schedule";
 import { findTmdb, findTmdbId, getTmdbSeason, getTmdbShow, type TmdbEpisode, type TmdbShow } from "@/lib/tmdb";
 import { getWikipediaEpisodes, getWikipediaSummary, type WikiEpisode } from "@/lib/wikipedia";
 import { normalize } from "@/lib/text";
@@ -11,7 +10,7 @@ import { findYoutubeVideo } from "@/lib/youtube";
 import { channelEpisodeTitles, channelMatcher } from "@/lib/youtube-channels";
 import { getPlutoOptions, getPlutoSeriesEpisodes, plutoMatcher, type PlutoEpisode } from "@/lib/pluto";
 import { findDailymotionVideo } from "@/lib/dailymotion";
-import type { ChannelId, Episode, Show, ShowExtras, Slot, VideoSource } from "@/lib/types";
+import type { Episode, Show, ShowExtras, VideoSource } from "@/lib/types";
 
 /**
  * Une el catálogo local con las APIs externas. Todo lo que se muestra está en español,
@@ -297,38 +296,6 @@ export async function resolveSource(
   return (await findYoutubeVideo(query, names, episodeNames)) ?? (await findDailymotionVideo(query, names, episodeNames));
 }
 
-/**
- * Grilla del día con títulos en español, armada solo con episodios que se pueden
- * ver en la página (ver getAvailableEpisodes); cada espacio ya trae su video.
- */
-export async function getEnrichedSchedule(channelId: ChannelId, date: Date): Promise<Slot[]> {
-  // Todo el catálogo: si el canal tiene pocas series disponibles se completa con otras.
-  const available = Object.fromEntries(
-    await Promise.all(Object.values(showById).map(async (s) => [s.id, await getAvailableEpisodes(s).catch(() => [])] as const)),
-  );
-  const slots = getDaySchedule(channelId, date, available);
-  const ids = [...new Set(slots.map((s) => s.show.id))];
-
-  const data = new Map(
-    await Promise.all(
-      ids.map(async (id) => {
-        const show = showById[id];
-        const tmdb = await loadTmdb(show);
-        const numbers = slots.filter((s) => s.show.id === id).map((s) => s.episode.number);
-        const [{ episodes }, find] = await Promise.all([tmdbEpisodes(show, tmdb, numbers), sourceFinder(show, tmdb?.name)]);
-        return [id, { episodes, find }] as const;
-      }),
-    ),
-  );
-
-  return slots.map((s) => {
-    const d = data.get(s.show.id);
-    const t = d?.episodes.get(s.episode.number);
-    const episode = toEpisode(s.episode, t);
-    return { ...s, episode: { ...episode, source: d?.find?.(episode, episodeNamesOf(t)) } };
-  });
-}
-
 /** Pósters de TMDB para la grilla de la biblioteca. */
 export async function getPosters(list: Show[]): Promise<Record<string, string>> {
   const entries = await Promise.all(
@@ -338,11 +305,4 @@ export async function getPosters(list: Show[]): Promise<Record<string, string>> 
     }),
   );
   return Object.fromEntries(entries.filter((e): e is readonly [string, string] => !!e[1]));
-}
-
-/** "2026-10-29" → Date local a medianoche (o hoy si es inválida). */
-export function parseDateParam(value: string | null): Date {
-  const m = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!m) return new Date();
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
 }

@@ -58,7 +58,9 @@ export default function TvPlayer({ source, title, subtitle, startAt = 0, badge, 
           )}
           {channel && (
             <>
-              <span key={channel.number} className="osd osd-flash pointer-events-none absolute right-4 top-3 z-20 font-mono text-4xl sm:text-5xl" aria-hidden>
+              {/* Zapping: ráfaga de estática al cambiar de canal */}
+              <span key={`zap-${channel.number}`} className="zap static-noise pointer-events-none absolute inset-0 z-30 bg-black" aria-hidden />
+              <span key={channel.number} className="osd osd-flash pointer-events-none absolute right-4 top-3 z-40 font-mono text-4xl sm:text-5xl" aria-hidden>
                 CH {channel.number}
               </span>
               <span

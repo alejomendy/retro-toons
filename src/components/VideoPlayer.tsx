@@ -14,7 +14,10 @@ type VideoPlayerProps = {
     autoPlay?: boolean;
     /** Se llama periódicamente, al pausar y al salir del episodio. */
     onProgress?: (episodeId: string, position: number, duration: number) => void;
-    onEnded?: (episodeId: string) => void;
+    /** El episodio terminó; `duration` en segundos (para decidir si entra otro antes del próximo programa). */
+    onEnded?: (episodeId: string, duration: number) => void;
+    /** No se pudo reproducir: sin fuentes, error al pedirlas o todas las fuentes fallaron. */
+    onUnavailable?: (episodeId: string) => void;
     /** Cuando el episodio empieza a reproducirse de verdad (para transiciones en vivo). */
     onPlaying?: (episodeId: string) => void;
     /**
@@ -68,6 +71,7 @@ export default function VideoPlayer({
     onProgress,
     onEnded,
     onPlaying,
+    onUnavailable,
     live = false,
 }: VideoPlayerProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -83,7 +87,7 @@ export default function VideoPlayer({
     // Valores que leen los listeners de Video.js sin tener que volver a registrarlos.
     const episodeRef = useRef(episodeId);
     const streamRef = useRef<LcStream | null>(null);
-    const callbacksRef = useRef({ onProgress, onEnded, onPlaying });
+    const callbacksRef = useRef({ onProgress, onEnded, onPlaying, onUnavailable });
     const pendingSeekRef = useRef(0);
     /** Cuándo se pidió el episodio (en vivo, el tiempo que pasa cargando también "sale al aire"). */
     const requestedAtRef = useRef(0);
@@ -95,8 +99,8 @@ export default function VideoPlayer({
     const reportRef = useRef<() => void>(() => {});
 
     useEffect(() => {
-        callbacksRef.current = { onProgress, onEnded, onPlaying };
-    }, [onProgress, onEnded, onPlaying]);
+        callbacksRef.current = { onProgress, onEnded, onPlaying, onUnavailable };
+    }, [onProgress, onEnded, onPlaying, onUnavailable]);
 
     // Inicializar y destruir Video.js (una sola instancia por montaje).
     useEffect(() => {
@@ -145,7 +149,7 @@ export default function VideoPlayer({
             if (seek > 0 && Number.isFinite(duration) && seek >= duration - 5) {
                 // El punto pedido ya pasó el final del episodio (ej. en vivo, durante la tanda).
                 if (activeEpisodeRef.current === episodeRef.current) {
-                    callbacksRef.current.onEnded?.(activeEpisodeRef.current);
+                    callbacksRef.current.onEnded?.(activeEpisodeRef.current, player.duration());
                 }
                 return;
             }
@@ -174,7 +178,7 @@ export default function VideoPlayer({
         player.on("ended", () => {
             report();
             if (activeEpisodeRef.current === episodeRef.current) {
-                callbacksRef.current.onEnded?.(activeEpisodeRef.current);
+                callbacksRef.current.onEnded?.(activeEpisodeRef.current, player.duration());
             }
         });
         player.on("error", () => {
@@ -277,6 +281,7 @@ export default function VideoPlayer({
                         ? err.message
                         : "Ocurrió un error al cargar el episodio."
                 );
+                callbacksRef.current.onUnavailable?.(episodeId);
             } finally {
                 if (!controller.signal.aborted) {
                     setLoading(false);
@@ -343,6 +348,12 @@ export default function VideoPlayer({
         }
         setSelectedStream(nextUntried);
     }, [live, nextUntried, selectedStream, failedUrls]);
+
+    // Todas las fuentes fallaron: se avisa para que la tele pruebe con otro episodio.
+    const allFailed = streams.length > 0 && streams.every((s) => failedUrls.includes(s.url));
+    useEffect(() => {
+        if (allFailed) callbacksRef.current.onUnavailable?.(episodeRef.current);
+    }, [allFailed]);
 
     if (live) {
         return (

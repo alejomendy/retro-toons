@@ -105,6 +105,13 @@ body {
 }
 .osd-flash { animation: osd-fade 3.5s ease-out forwards; }
 
+/* Zapping: estática que se va en medio segundo al cambiar de canal */
+@keyframes zap {
+  0%, 35% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+.zap { animation: zap 0.7s steps(6) forwards, static-shift 0.25s steps(4) infinite; }
+
 /* Zócalo "Estás viendo": entra deslizando, queda unos segundos y se va */
 @keyframes lower-third {
   0% { opacity: 0; transform: translateX(-24px); }
@@ -116,4 +123,5 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .static-noise, .blink, .marquee, .osd-flash { animation: none; }
   .lower-third { animation: none; opacity: 0; }
+  .zap { animation: none; opacity: 0; }
 }

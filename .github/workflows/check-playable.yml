@@ -25,7 +25,7 @@ jobs:
 
       - name: Revisar series
         env:
-          LACARTOONS_ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv.onrender.com' }}
+          LACARTOONS_ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv-addon.onrender.com' }}
         run: node scripts/check-playable.mjs
 
       - name: Guardar la lista si cambió

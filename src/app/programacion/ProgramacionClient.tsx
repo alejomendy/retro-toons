@@ -2,12 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Play } from "lucide-react";
+import { ChevronDown, ChevronUp, Play } from "lucide-react";
 import { channelById, channelNumber, channels } from "@/data/channels";
 import PageHeader from "@/components/PageHeader";
 import { useTheaterMode } from "@/lib/use-theater";
 import { prefetchStreams } from "@/lib/prefetch-streams";
+import { useOnAir } from "@/lib/use-on-air";
 import TvPlayer, { NoSignal } from "@/components/TvPlayer";
 import VideoPlayer from "@/components/VideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
@@ -78,6 +80,7 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
   }, [nextSoon, nextUp]);
   // El modo cine se guarda acá para que no se apague cuando cambia el programa.
   const [cinema, setCinema] = useTheaterMode();
+  const remote = useRemoteControl(channelId);
 
   return (
     <div className="space-y-6">
@@ -92,18 +95,22 @@ export default function ProgramacionClient({ channelId }: { channelId: ChannelId
       {/* En modo cine la tele toma todo el ancho y la grilla pasa abajo (mismo árbol: el video no se corta). */}
       <div className={cinema ? "grid gap-6" : "grid gap-6 lg:grid-cols-[1fr_360px]"}>
         <section className="min-w-0 space-y-4">
-          {current && now ? (
-            <LiveTv slot={current} now={now} next={upcoming[0]} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
-          ) : (
-            <TvPlayer
-              title={error ? "Sin señal" : "Sintonizando..."}
-              subtitle={channel.name}
-              overlay={error ? <NoSignal title="Sin señal" subtitle={error} hint={null} /> : <Tuning channelName={channel.name} />}
-              channel={tvChannel(channelId)}
-              cinema={cinema}
-              onCinemaChange={setCinema}
-            />
-          )}
+          {/* Deslizar el dedo sobre la tele cambia de canal, como el control remoto. */}
+          <div onTouchStart={remote.onTouchStart} onTouchEnd={remote.onTouchEnd}>
+            {current && now ? (
+              <LiveTv slot={current} now={now} upcoming={upcoming} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
+            ) : (
+              <TvPlayer
+                title={error ? "Sin señal" : "Sintonizando..."}
+                subtitle={channel.name}
+                overlay={error ? <NoSignal title="Sin señal" subtitle={error} hint={null} /> : <Tuning channelName={channel.name} />}
+                channel={tvChannel(channelId)}
+                cinema={cinema}
+                onCinemaChange={setCinema}
+              />
+            )}
+          </div>
+          <RemoteBar channelId={channelId} onPrev={remote.prev} onNext={remote.next} />
           {error && (
             <button
               type="button"
@@ -270,30 +277,57 @@ const IDENT_MAX_MS = 25_000;
 function LiveTv({
   slot,
   now,
-  next,
+  upcoming,
   channelId,
   cinema,
   onCinemaChange,
 }: {
   slot: LcSlot;
   now: Date;
-  next?: LcSlot;
+  upcoming: LcSlot[];
   channelId: ChannelId;
   cinema: boolean;
   onCinemaChange: (cinema: boolean) => void;
 }) {
   const channel = channelById[channelId];
   const slotKey = `${channelId}-${slot.start}`;
-  // El punto de arranque se fija al sintonizar el espacio; después el video corre solo.
-  const [tuned, setTuned] = useState(() => ({ key: slotKey, startAt: secondsIntoSlot(slot) }));
+  // Qué episodio del espacio se está pasando: 0 = el de la grilla, 1..n = los de reserva (slot.more).
+  // El punto de arranque se fija al sintonizarlo; después el video corre solo.
+  const [play, setPlay] = useState(() => ({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) }));
   const [endedKey, setEndedKey] = useState<string | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [identExpiredKey, setIdentExpiredKey] = useState<string | null>(null);
-  if (tuned.key !== slotKey) {
-    setTuned({ key: slotKey, startAt: secondsIntoSlot(slot) });
+  if (play.key !== slotKey) {
+    setPlay({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
   }
-  const handleEnded = useCallback(() => setEndedKey(slotKey), [slotKey]);
-  const handlePlaying = useCallback(() => setPlayingKey(slotKey), [slotKey]);
+  const reserve = slot.more ?? [];
+  const pick = play.key === slotKey ? play.pick : 0;
+  const episode = pick === 0 ? slot.episode : reserve[pick - 1];
+  const showing: LcSlot = { ...slot, episode };
+  const playKey = `${slotKey}-${pick}`;
+
+  const handlePlaying = useCallback(() => setPlayingKey(playKey), [playKey]);
+  // Si el episodio no carga, se pasa otro de la misma serie desde el mismo punto del espacio (sin "Sin señal").
+  const handleUnavailable = useCallback(
+    (id: string) => {
+      if (id !== episode.id || pick >= reserve.length) return;
+      setPlay({ key: slotKey, pick: pick + 1, startAt: secondsIntoSlot(slot) });
+    },
+    [episode.id, pick, reserve.length, slotKey, slot],
+  );
+  // Si termina y sobra tiempo para otro igual de largo (ej. cortos de 7-11 min), sigue el próximo; si no, tanda.
+  const handleEnded = useCallback(
+    (id: string, duration: number) => {
+      if (id !== episode.id) return;
+      const left = (slot.end - minutesNow(new Date())) * 60;
+      if (pick < reserve.length && Number.isFinite(duration) && duration > 0 && left >= duration * 0.9) {
+        setPlay({ key: slotKey, pick: pick + 1, startAt: 0 });
+      } else {
+        setEndedKey(slotKey);
+      }
+    },
+    [episode.id, pick, reserve.length, slot.end, slotKey],
+  );
 
   // Fuentes externas (iframe de YouTube, Pluto TV): no avisan cuándo terminan, se usa la duración del episodio.
   const externalOver = !!slot.external && minutesNow(now) - slot.start >= slot.external.minutes;
@@ -301,21 +335,21 @@ function LiveTv({
 
   // La placa del canal tapa la carga del episodio nuevo (o se va sola si tarda demasiado).
   useEffect(() => {
-    const id = window.setTimeout(() => setIdentExpiredKey(slotKey), IDENT_MAX_MS);
+    const id = window.setTimeout(() => setIdentExpiredKey(playKey), IDENT_MAX_MS);
     return () => window.clearTimeout(id);
-  }, [slotKey]);
-  const showIdent = !slot.external && !inBreak && playingKey !== slotKey && identExpiredKey !== slotKey;
-  // El zócalo aparece cuando arranca el episodio (en los externos, al sintonizar).
-  const showLowerThird = !inBreak && (slot.external ? true : playingKey === slotKey);
+  }, [playKey]);
+  const showIdent = !slot.external && !inBreak && playingKey !== playKey && identExpiredKey !== playKey;
+  // El zócalo aparece cuando arranca cada episodio (en los externos, al sintonizar).
+  const showLowerThird = !inBreak && (slot.external ? true : playingKey === playKey);
 
-  const bumper = <Bumper channelId={channelId} next={next} />;
+  const bumper = <Bumper channelId={channelId} upcoming={upcoming} />;
 
   if (slot.external) {
     return (
       <TvPlayer
         key={slotKey}
         source={slot.external.source}
-        startAt={tuned.startAt}
+        startAt={play.startAt}
         title={slot.series.name}
         subtitle={`${episodeLabel(slot.episode)} · ${slot.episode.title} · ${slot.block}`}
         badge={inBreak ? "TANDA" : "EN VIVO"}
@@ -332,18 +366,26 @@ function LiveTv({
   return (
     <TvPlayer
       title={slot.series.name}
-      subtitle={`${episodeLabel(slot.episode)} · ${slot.episode.title} · ${slot.block}`}
+      subtitle={`${episodeLabel(episode)} · ${episode.title} · ${slot.block}`}
       badge={inBreak ? "TANDA" : "EN VIVO"}
       badgeColor={inBreak ? "#7c3aed" : "#ef4444"}
       overlay={
         <>
-          <VideoPlayer episodeId={slot.episode.id} startAt={tuned.startAt} autoPlay live onEnded={handleEnded} onPlaying={handlePlaying} />
+          <VideoPlayer
+            episodeId={episode.id}
+            startAt={play.startAt}
+            autoPlay
+            live
+            onEnded={handleEnded}
+            onPlaying={handlePlaying}
+            onUnavailable={handleUnavailable}
+          />
           {showIdent && (
             <div className="absolute inset-0 z-20">
-              <ChannelIdent channelId={channelId} slot={slot} />
+              <ChannelIdent channelId={channelId} slot={showing} />
             </div>
           )}
-          {showLowerThird && <LowerThird key={slotKey} slot={slot} color={channel.color} ink={channel.ink} />}
+          {showLowerThird && <LowerThird key={playKey} slot={showing} color={channel.color} ink={channel.ink} />}
           {inBreak && <div className="absolute inset-0 z-20">{bumper}</div>}
         </>
       }
@@ -413,10 +455,19 @@ function LowerThird({ slot, color, ink }: { slot: LcSlot; color: string; ink: st
   );
 }
 
-/** Tanda entre programas: cuenta regresiva al próximo y su ficha. Deja listas sus fuentes. */
-function Bumper({ channelId, next }: { channelId: ChannelId; next?: LcSlot }) {
+/** Cada cuánto cambia el aviso de "Ahora en otros canales" durante la tanda. */
+const OTHER_CHANNEL_MS = 4000;
+
+/**
+ * Tanda entre programas: cuenta regresiva al próximo y su ficha, lo que viene más tarde y,
+ * rotando, lo que pasan ahora los otros canales. Deja listas las fuentes del próximo.
+ */
+function Bumper({ channelId, upcoming }: { channelId: ChannelId; upcoming: LcSlot[] }) {
   const c = channelById[channelId];
-  const [, tick] = useState(0);
+  const next = upcoming[0];
+  const later = upcoming.slice(1, 3);
+  const others = useOnAir().filter((o) => o.channel.id !== channelId && o.current);
+  const [tickCount, tick] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => tick((n) => n + 1), 1000);
     return () => window.clearInterval(id);
@@ -428,25 +479,44 @@ function Bumper({ channelId, next }: { channelId: ChannelId; next?: LcSlot }) {
 
   const left = next ? Math.max(0, Math.round((next.start - minutesNow(new Date())) * 60)) : 0;
   const countdown = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  const other = others.length > 0 ? others[Math.floor((tickCount * 1000) / OTHER_CHANNEL_MS) % others.length] : undefined;
 
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: c.color, color: c.ink }}>
       <div className="checker absolute inset-x-0 top-0 h-3 opacity-30" aria-hidden />
-      <div className="absolute inset-0 grid place-items-center p-6 text-center">
-        <div className="space-y-3">
-          <p className="font-mono text-xl opacity-80 sm:text-2xl">
-            Estás viendo {c.name} · CH {channelNumber(channelId)}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center sm:gap-3 sm:p-6">
+        <p className="font-mono text-lg opacity-80 sm:text-2xl">
+          Estás viendo {c.name} · CH {channelNumber(channelId)}
+        </p>
+        <p className="font-display text-2xl leading-none [text-shadow:3px_3px_0_#000] sm:text-5xl">{next && left <= 30 ? "¡Ya empieza!" : "¡Ya volvemos!"}</p>
+        {next && (
+          <SlotCard
+            slot={next}
+            label={`A CONTINUACIÓN · ${formatTime(next.start)}`}
+            labelClass="text-accent"
+            aside={<span className="osd shrink-0 font-mono text-3xl tabular-nums">{countdown}</span>}
+          />
+        )}
+        {later.length > 0 && (
+          <ul className="hidden w-full max-w-md space-y-0.5 rounded-lg bg-black/45 px-3 py-1.5 text-left text-sm text-white sm:block">
+            <li className="font-mono text-base leading-none text-white/60">MÁS TARDE</li>
+            {later.map((s) => (
+              <li key={s.start} className="truncate">
+                <span className="mr-2 font-mono text-base text-accent">{formatTime(s.start)}</span>
+                {s.series.name}
+              </li>
+            ))}
+          </ul>
+        )}
+        {other?.current && (
+          <p key={other.channel.id} className="lower-third hidden max-w-md items-center gap-2 truncate rounded-lg bg-black/60 px-3 py-1 text-sm text-white sm:flex">
+            <span className="shrink-0 font-mono text-base text-white/60">AHORA EN</span>
+            <span className="shrink-0 rounded border-2 border-black px-1.5 font-display text-xs" style={{ backgroundColor: other.channel.color, color: other.channel.ink }}>
+              {other.channel.name}
+            </span>
+            <span className="truncate font-bold">{other.current.series.name}</span>
           </p>
-          <p className="font-display text-3xl leading-none [text-shadow:3px_3px_0_#000] sm:text-5xl">{next && left <= 30 ? "¡Ya empieza!" : "¡Ya volvemos!"}</p>
-          {next && (
-            <SlotCard
-              slot={next}
-              label={`A CONTINUACIÓN · ${formatTime(next.start)}`}
-              labelClass="text-accent"
-              aside={<span className="osd shrink-0 font-mono text-3xl tabular-nums">{countdown}</span>}
-            />
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -623,5 +693,83 @@ function SlotLink({ slot, className, children }: { slot: LcSlot; className: stri
     <a href={slot.external.url} target="_blank" rel="noreferrer" className={className}>
       {children}
     </a>
+  );
+}
+
+/** Distancia mínima (px) de un deslizamiento horizontal para cambiar de canal. */
+const SWIPE_MIN_PX = 60;
+
+/**
+ * Control remoto: ↑/↓ o +/− cambian de canal, 1–6 van directo a uno, y en el celular se desliza
+ * sobre la tele. Cambia de canal sin recargar la página (navegación del lado del cliente).
+ */
+function useRemoteControl(channelId: ChannelId) {
+  const router = useRouter();
+  const index = channels.findIndex((c) => c.id === channelId);
+  const go = useCallback((i: number) => {
+    const target = channels[(i + channels.length) % channels.length];
+    router.push(`/programacion?canal=${target.id}`, { scroll: false });
+  }, [router]);
+  const next = useCallback(() => go(index + 1), [go, index]);
+  const prev = useCallback(() => go(index - 1), [go, index]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      // No interferir al escribir ni con los controles del reproductor (las flechas adelantan el video).
+      if (target?.closest("input, textarea, select, [contenteditable], .video-js")) return;
+      if (e.key === "ArrowUp" || e.key === "+" || e.key === "PageUp") {
+        e.preventDefault();
+        next();
+      } else if (e.key === "ArrowDown" || e.key === "-" || e.key === "PageDown") {
+        e.preventDefault();
+        prev();
+      } else if (/^[1-9]$/.test(e.key) && Number(e.key) <= channels.length) {
+        go(Number(e.key) - 1);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, next, prev]);
+
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY };
+  }, []);
+  const onTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      const start = touch.current;
+      touch.current = null;
+      const t = e.changedTouches[0];
+      if (!start || !t) return;
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dy) > Math.abs(dx) / 2) return;
+      if (dx < 0) next();
+      else prev();
+    },
+    [next, prev],
+  );
+
+  return { next, prev, onTouchStart, onTouchEnd };
+}
+
+/** Botonera tipo control remoto debajo de la tele. */
+function RemoteBar({ channelId, onPrev, onNext }: { channelId: ChannelId; onPrev: () => void; onNext: () => void }) {
+  const btn =
+    "chunky inline-flex items-center gap-1 rounded-lg bg-[#c9a36b] px-3 py-1.5 font-display text-sm text-black transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent";
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <button type="button" onClick={onPrev} className={btn} aria-label="Canal anterior">
+        <ChevronDown className="size-4" /> CH −
+      </button>
+      <span className="osd rounded-lg bg-black px-3 py-1 font-mono text-2xl">CH {channelNumber(channelId)}</span>
+      <button type="button" onClick={onNext} className={btn} aria-label="Canal siguiente">
+        <ChevronUp className="size-4" /> CH +
+      </button>
+      <span className="hidden font-mono text-lg text-white/50 md:inline">Control remoto: ↑ ↓ · 1–{channels.length} · deslizá en el celular</span>
+    </div>
   );
 }

@@ -1,0 +1,26 @@
+# En cada push y pull request: tipos, lint y que la programación esté completa.
+# Así un error al editar los canales no llega a producción.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Tipos
+        run: npx tsc --noEmit
+      - name: Lint
+        run: npm run lint
+      - name: Programación (24 hs por día, bloques válidos)
+        run: node scripts/validate-channels.mjs

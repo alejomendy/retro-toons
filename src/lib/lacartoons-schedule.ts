@@ -30,6 +30,8 @@ const MIN_BLOCK_SERIES = 4;
 const EXTERNAL = "ext:";
 /** Duración mínima (min) de un episodio externo para ocupar un espacio de la grilla. */
 const MIN_EXTERNAL_MINUTES = 15;
+/** Episodios de reserva por espacio (si el del espacio no carga o sobra tiempo). */
+const MORE_EPISODES = 3;
 const MAX_CATALOG_PAGES = 40;
 const DAY_MINUTES = 24 * 60;
 // El catálogo y las fichas cambian poco: un día de caché le ahorra muchas consultas al addon.
@@ -234,11 +236,14 @@ export async function getLcSchedule(channelId: ChannelId, date: Date): Promise<L
       }
 
       const series = loaded.get(key)!;
-      const ep = series.videos[pick(series.videos.length)];
+      const index = pick(series.videos.length);
+      const ep = series.videos[index];
+      const more = Array.from({ length: Math.min(MORE_EPISODES, series.videos.length - 1) }, (_, k) => series.videos[(index + 1 + k) % series.videos.length]);
       slots.push({
         ...time,
         series: { id: series.id, name: series.name, poster: series.poster },
         episode: { id: ep.id, title: ep.title, season: ep.season, episode: ep.episode },
+        more: more.map((m) => ({ id: m.id, title: m.title, season: m.season, episode: m.episode })),
       });
     }
   });
@@ -359,6 +364,6 @@ export const getCachedSchedule = unstable_cache(
     const [y, m, d] = fecha.split("-").map(Number);
     return getLcSchedule(channelId, new Date(y, m - 1, d));
   },
-  ["lacartoons-schedule", String(playableList.checkedAt ?? "sin-lista")],
+  ["lacartoons-schedule-v2", String(playableList.checkedAt ?? "sin-lista")],
   { revalidate: 7 * 24 * 60 * 60 },
 );

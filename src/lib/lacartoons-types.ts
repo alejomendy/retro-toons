@@ -88,6 +88,11 @@ export interface LcSlot {
   series: Pick<LcSeriesSummary, "id" | "name" | "poster">;
   episode: Pick<LcEpisode, "id" | "title" | "season" | "episode">;
   /**
+   * Episodios siguientes de la misma serie: la tele los usa si el del espacio no carga
+   * o si termina con tiempo de sobra antes del próximo programa (como los cortos).
+   */
+  more?: Pick<LcEpisode, "id" | "title" | "season" | "episode">[];
+  /**
    * Episodio de otra fuente legal (canal oficial de YouTube, Pluto TV...) para series
    * icónicas que LACartoons no tiene. Sin esto, el espacio es de LACartoons.
    */

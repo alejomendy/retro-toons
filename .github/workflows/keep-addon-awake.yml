@@ -11,9 +11,20 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 8
     steps:
+      # Si después de 3 intentos (un minuto entre cada uno) el addon no responde, el workflow
+      # falla a propósito: GitHub manda un mail cuando falla una tarea programada.
       - name: Ping al manifiesto del addon
         env:
-          ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv.onrender.com' }}
-        run: curl -fsS --max-time 120 -o /dev/null -w "%{http_code} en %{time_total}s\n" "$ADDON_URL/manifest.json"
+          ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv-addon.onrender.com' }}
+        run: |
+          for attempt in 1 2 3; do
+            if curl -fsS --max-time 90 -o /dev/null -w "Intento $attempt: %{http_code} en %{time_total}s\n" "$ADDON_URL/manifest.json"; then
+              exit 0
+            fi
+            echo "Intento $attempt: el addon no respondió."
+            [ "$attempt" -lt 3 ] && sleep 60
+          done
+          echo "::error::El addon de LACartoons ($ADDON_URL) no responde. Revisá el servicio en Render."
+          exit 1

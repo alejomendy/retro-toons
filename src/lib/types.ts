@@ -112,16 +112,6 @@ export interface ShowExtras {
   tmdbId: number | null;
 }
 
-export interface Slot {
-  start: number; // minutos desde las 00:00
-  end: number;
-  block: string;
-  show: Show;
-  episode: Episode;
-  /** Serie de otro canal que completa la grilla (el canal no tiene suficientes disponibles). */
-  guest?: boolean;
-}
-
 /** Dónde ver la serie gratis y legal (sin embeber), ej. un canal de Pluto TV. */
 export interface FreeOption {
   platform: string;

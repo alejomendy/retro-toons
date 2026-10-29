@@ -1,0 +1,22 @@
+# Cada 30 minutos (10 minutos antes de cada cambio de programa) deja listas en la caché
+# las fuentes de lo que está por salir al aire en todos los canales: la tele arranca al instante.
+name: Precargar lo que sale al aire
+
+on:
+  schedule:
+    - cron: "20,50 * * * *"
+  workflow_dispatch:
+
+jobs:
+  prewarm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Precargar episodios
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://retro-toons.vercel.app' }}
+        run: node scripts/prewarm.mjs

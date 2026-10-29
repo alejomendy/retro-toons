@@ -4,7 +4,7 @@
  * src/data/playable.json. La grilla usa ese archivo en vez de consultar al addon en cada visita
  * (eso saturaba al addon del plan gratis y hacía que la grilla cambiara al recargar).
  *
- * Uso:  LACARTOONS_ADDON_URL=https://retrotoons-tv.onrender.com node scripts/check-playable.mjs
+ * Uso:  LACARTOONS_ADDON_URL=https://retrotoons-tv-addon.onrender.com node scripts/check-playable.mjs
  * Lo corre cada semana .github/workflows/check-playable.yml. Va de a una serie, sin apuro.
  * Si una serie no responde se conserva lo que decía el archivo (no se marca "sin video" por un timeout).
  */
@@ -78,16 +78,29 @@ for (const w of wanted) {
 
 const series = { ...previous.series };
 let i = 0;
-for (const [id, name] of [...ids].sort()) {
+// ONLY_FALSE=1: solo vuelve a revisar las que figuran sin video (o sin dato).
+const toCheck = [...ids].sort().filter(([id]) => process.env.ONLY_FALSE !== "1" || series[id]?.playable !== true);
+console.log(`Revisando ${toCheck.length} series.`);
+for (const [id, name] of toCheck) {
   i++;
   try {
     const meta = await getJson(`/meta/series/${encodeURIComponent(id)}.json`);
-    const first = meta.meta?.videos?.[0]?.id;
-    const playable = first ? ((await getJson(`/stream/series/${encodeURIComponent(first)}.json`)).streams ?? []).length > 0 : false;
+    // Se prueban hasta 3 episodios (primero, del medio y uno de los últimos): a veces justo el
+    // primero está roto y el resto anda. Alcanza con que uno tenga video.
+    const videos = meta.meta?.videos ?? [];
+    const sample = [...new Set([0, Math.floor(videos.length / 2), Math.max(0, videos.length - 2)])].filter((k) => k < videos.length);
+    let playable = false;
+    for (const k of sample) {
+      const streams = (await getJson(`/stream/series/${encodeURIComponent(videos[k].id)}.json`)).streams ?? [];
+      if (streams.length > 0) {
+        playable = true;
+        break;
+      }
+    }
     series[id] = { name, playable };
-    console.log(`[${i}/${ids.size}] ${playable ? "OK " : "-- "} ${name}`);
+    console.log(`[${i}/${toCheck.length}] ${playable ? "OK " : "-- "} ${name}`);
   } catch (error) {
-    console.log(`[${i}/${ids.size}] ??  ${name} (sin respuesta, se conserva: ${series[id]?.playable ?? "sin dato"}) ${error.message}`);
+    console.log(`[${i}/${toCheck.length}] ??  ${name} (sin respuesta, se conserva: ${series[id]?.playable ?? "sin dato"}) ${error.message}`);
   }
 }
 

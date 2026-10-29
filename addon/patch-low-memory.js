@@ -1,6 +1,8 @@
 // Ajustes del addon LACartoons para el plan gratis de Render (512 MB de memoria).
 // Se aplica al construir la imagen (ver Dockerfile). Si el código del addon cambia y algún
 // reemplazo deja de aplicar, el build falla a propósito en vez de seguir sin el ajuste.
+// Corre con Node dentro de la imagen del addon (CommonJS), no es parte de la app.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const fs = require("fs");
 
 const file = process.argv[2];
