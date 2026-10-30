@@ -15,7 +15,7 @@ export interface StreamsResponse {
 }
 
 /** Las respuestas buenas se reusan un rato; los errores se vuelven a pedir. */
-const KEEP_MS = 10 * 60 * 1000;
+const KEEP_MS = 30 * 60 * 1000;
 /** Pedidos de antemano que esperan turno (los más viejos se descartan). */
 const MAX_QUEUED = 2;
 

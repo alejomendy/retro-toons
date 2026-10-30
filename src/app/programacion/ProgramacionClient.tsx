@@ -309,8 +309,28 @@ function secondsIntoSlot(slot: LcSlot): number {
   return Math.max(0, (minutesNow(new Date()) - slot.start) * 60);
 }
 
-/** Si el episodio no arrancó en este tiempo, se saca la placa del canal y se ve el estado real del reproductor. */
-const IDENT_MAX_MS = 25_000;
+/** Tope de espera entre un capítulo y otro: pasado esto se saca la placa y se ve el estado real del reproductor. */
+const IDENT_MAX_MS = 15_000;
+/** Con menos tiempo que esto en el espacio no se arranca otro capítulo de la serie: se adelanta el próximo programa. */
+const MIN_FILL_SECONDS = 180;
+/** Con tan poco tiempo restante alcanza con una tanda corta hasta el próximo programa. */
+const SHORT_BREAK_SECONDS = 15;
+/** Un rato después de arrancar el capítulo se dejan listas las fuentes de lo que puede seguir. */
+const PREFETCH_NEXT_MS = 30_000;
+
+interface Play {
+  /** Espacio al que corresponde (si cambia el espacio, se vuelve a sintonizar). */
+  key: string;
+  /** 0 = el episodio de la grilla, 1..n = los de reserva (slot.more). */
+  pick: number;
+  startAt: number;
+  /** Clave del próximo espacio si su episodio arrancó antes de hora (al llegar su horario sigue sin cortar). */
+  early?: string;
+  /** El adelantado no tenía video: al llegar su horario se sintoniza normal. */
+  earlyFailed?: boolean;
+  /** Viene a continuación de otro capítulo que terminó (no de sintonizar el canal). */
+  follows?: boolean;
+}
 
 /**
  * La tele en vivo: reproduce el episodio del espacio actual desde el minuto que corresponde.
@@ -337,42 +357,72 @@ function LiveTv({
   const slotKey = `${channelId}-${slot.start}`;
   // Qué episodio del espacio se está pasando: 0 = el de la grilla, 1..n = los de reserva (slot.more).
   // El punto de arranque se fija al sintonizarlo; después el video corre solo.
-  const [play, setPlay] = useState(() => ({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) }));
+  const [play, setPlay] = useState<Play>(() => ({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) }));
   const [endedKey, setEndedKey] = useState<string | null>(null);
   const [playingKey, setPlayingKey] = useState<string | null>(null);
   const [identExpiredKey, setIdentExpiredKey] = useState<string | null>(null);
   if (play.key !== slotKey) {
-    setPlay({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
+    // Si el programa ya venía adelantado, sigue corriendo sin cortar (mismo episodio y mismo punto de arranque).
+    const carry = play.early === slotKey && !play.earlyFailed;
+    setPlay(carry ? { key: slotKey, pick: 0, startAt: play.startAt, follows: true } : { key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
   }
   const reserve = slot.more ?? [];
   const pick = play.key === slotKey ? play.pick : 0;
-  const episode = pick === 0 ? slot.episode : reserve[pick - 1];
-  const showing: LcSlot = { ...slot, episode };
-  const playKey = `${slotKey}-${pick}`;
+  // El próximo programa, si empieza justo cuando termina este (para adelantarlo).
+  const nextSlot = upcoming[0] && upcoming[0].start === slot.end && !upcoming[0].external ? upcoming[0] : undefined;
+  const nextSlotKey = nextSlot ? `${channelId}-${nextSlot.start}` : null;
+  const early = play.key === slotKey && !!nextSlot && play.early === nextSlotKey ? nextSlot : undefined;
+  const episode = early ? early.episode : pick === 0 ? slot.episode : reserve[pick - 1];
+  const showing: LcSlot = { ...(early ?? slot), episode };
+  // El adelantado usa la clave que va a tener en su espacio: al llegar su horario no se vuelve a mostrar la placa.
+  const playKey = early ? `${nextSlotKey}-0` : `${slotKey}-${pick}`;
 
   const handlePlaying = useCallback(() => setPlayingKey(playKey), [playKey]);
-  // Si el episodio no carga, se pasa otro de la misma serie desde el mismo punto del espacio (sin "Sin señal").
+  // Si el episodio no carga, se pasa otro de la misma serie (sin "Sin señal"): el de la grilla se reemplaza
+  // desde el mismo punto del espacio; uno de relleno, desde el principio.
   const handleUnavailable = useCallback(
     (id: string) => {
-      if (id !== episode.id || pick >= reserve.length) return;
-      setPlay({ key: slotKey, pick: pick + 1, startAt: secondsIntoSlot(slot) });
-    },
-    [episode.id, pick, reserve.length, slotKey, slot],
-  );
-  // Si termina y sobra tiempo para otro igual de largo (ej. cortos de 7-11 min), sigue el próximo; si no, tanda.
-  const handleEnded = useCallback(
-    (id: string, duration: number) => {
       if (id !== episode.id) return;
+      if (early) {
+        setPlay((p) => ({ ...p, earlyFailed: true }));
+        setEndedKey(slotKey);
+        return;
+      }
+      if (pick >= reserve.length) return;
+      setPlay({ key: slotKey, pick: pick + 1, startAt: play.startAt === 0 && pick > 0 ? 0 : secondsIntoSlot(slot) });
+    },
+    [episode.id, early, pick, reserve.length, slotKey, slot, play.startAt],
+  );
+  // Al terminar, nunca una tanda larga: sigue otro capítulo de la serie o se adelanta el próximo programa.
+  const handleEnded = useCallback(
+    (id: string) => {
+      if (id !== episode.id) return;
+      recordFinishedEpisode(showing.series.id, showing.series.name);
       const left = (slot.end - minutesNow(new Date())) * 60;
-      if (pick < reserve.length && Number.isFinite(duration) && duration > 0 && left >= duration * 0.9) {
-        setPlay({ key: slotKey, pick: pick + 1, startAt: 0 });
+      if (!early && pick < reserve.length && left > MIN_FILL_SECONDS) {
+        setPlay({ key: slotKey, pick: pick + 1, startAt: 0, follows: true });
+      } else if (!early && nextSlotKey && left > SHORT_BREAK_SECONDS) {
+        setPlay({ key: slotKey, pick, startAt: 0, early: nextSlotKey, follows: true });
+      } else if (!early && pick < reserve.length && left > SHORT_BREAK_SECONDS) {
+        setPlay({ key: slotKey, pick: pick + 1, startAt: 0, follows: true });
       } else {
         setEndedKey(slotKey);
       }
-      recordFinishedEpisode(slot.series.id, slot.series.name);
     },
-    [episode.id, pick, reserve.length, slot.end, slot.series.id, slot.series.name, slotKey],
+    [episode.id, early, pick, reserve.length, slot.end, showing.series.id, showing.series.name, slotKey, nextSlotKey],
   );
+
+  // Mientras se ve un capítulo se dejan listas las fuentes de lo que puede seguir (el de reserva y el próximo programa).
+  const playingNow = playingKey === playKey;
+  // Primero el que más seguro sigue (el de reserva): el addon busca de a una.
+  const followIds = [!early && pick < reserve.length ? reserve[pick].id : null, nextSlot && !early ? nextSlot.episode.id : null]
+    .filter(Boolean)
+    .join(",");
+  useEffect(() => {
+    if (!playingNow || !followIds) return;
+    const id = window.setTimeout(() => followIds.split(",").forEach(prefetchStreams), PREFETCH_NEXT_MS);
+    return () => window.clearTimeout(id);
+  }, [playingNow, followIds]);
 
   // Fuentes externas (iframe de YouTube, Pluto TV): no avisan cuándo terminan, se usa la duración del episodio.
   const externalOver = !!slot.external && minutesNow(now) - slot.start >= slot.external.minutes;
@@ -384,6 +434,8 @@ function LiveTv({
     return () => window.clearTimeout(id);
   }, [playKey]);
   const showIdent = !slot.external && !inBreak && playingKey !== playKey && identExpiredKey !== playKey;
+  // Al sintonizar la placa dice "Ahora"; de un capítulo a otro, "A continuación".
+  const transition = !!play.follows;
   // El zócalo aparece cuando arranca cada episodio (en los externos, al sintonizar).
   const showLowerThird = !inBreak && (slot.external ? true : playingKey === playKey);
 
@@ -410,8 +462,8 @@ function LiveTv({
 
   return (
     <TvPlayer
-      title={slot.series.name}
-      subtitle={`${episodeLabel(episode)} · ${episode.title} · ${slot.block}`}
+      title={showing.series.name}
+      subtitle={`${episodeLabel(episode)} · ${episode.title} · ${showing.block}`}
       badge={inBreak ? "TANDA" : "EN VIVO"}
       badgeColor={inBreak ? "#7c3aed" : "#ef4444"}
       overlay={
@@ -425,11 +477,17 @@ function LiveTv({
             onPlaying={handlePlaying}
             onUnavailable={handleUnavailable}
           />
-          {showIdent && (
-            <div className="absolute inset-0 z-20">
-              <ChannelIdent channelId={channelId} slot={showing} />
+          {/* La placa se desvanece cuando arranca el video (en vez de desaparecer de golpe). */}
+          {!slot.external && !inBreak && (
+            <div
+              className={`absolute inset-0 z-20 transition-opacity duration-700 ${showIdent ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              aria-hidden={!showIdent}
+            >
+              <ChannelIdent key={playKey} channelId={channelId} slot={showing} transition={transition} />
             </div>
           )}
+          {/* Corte con estática, como al cambiar de programa en la tele. */}
+          {transition && <span key={`cut-${playKey}`} className="zap static-noise pointer-events-none absolute inset-0 z-30 bg-black" aria-hidden />}
           {showLowerThird && <LowerThird key={playKey} slot={showing} color={channel.color} ink={channel.ink} />}
           {inBreak && <div className="absolute inset-0 z-20">{bumper}</div>}
         </>
@@ -441,21 +499,28 @@ function LiveTv({
   );
 }
 
-/** Placa del canal mientras se sintoniza el episodio nuevo (en vez de estática). */
-function ChannelIdent({ channelId, slot }: { channelId: ChannelId; slot: LcSlot }) {
+/**
+ * Placa del canal mientras se sintoniza el episodio nuevo (en vez de estática). Entre capítulos
+ * dice "A continuación" y una barra muestra que la espera tiene tope (IDENT_MAX_MS).
+ */
+function ChannelIdent({ channelId, slot, transition }: { channelId: ChannelId; slot: LcSlot; transition: boolean }) {
   const c = channelById[channelId];
   return (
     <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: c.color, color: c.ink }}>
       <div className="checker absolute inset-x-0 top-0 h-3 opacity-30" aria-hidden />
       <div className="checker absolute inset-x-0 bottom-0 h-3 opacity-30" aria-hidden />
       <div className="absolute inset-0 grid place-items-center p-6 text-center">
-        <div className="space-y-3">
+        <div className="ident-in space-y-3">
           <p className="osd font-mono text-4xl sm:text-6xl">CH {channelNumber(channelId)}</p>
-          <p className="font-display text-3xl leading-none [text-shadow:3px_3px_0_#000] sm:text-6xl">{c.name}</p>
-          <SlotCard slot={slot} label={`AHORA · ${formatTime(slot.start)}`} labelClass="text-red-400" />
-          <p className="flex items-center justify-center gap-2 font-mono text-lg opacity-80">
-            <span className="blink size-2 rounded-full bg-current" /> Sintonizando…
-          </p>
+          <p className="font-display text-3xl leading-none [text-shadow:3px_3px_0_#000] sm:text-6xl">{transition ? "¡Ya sigue!" : c.name}</p>
+          <SlotCard
+            slot={slot}
+            label={transition ? "A CONTINUACIÓN" : `AHORA · ${formatTime(slot.start)}`}
+            labelClass={transition ? "text-accent" : "text-red-400"}
+          />
+          <div className="mx-auto h-2 w-48 overflow-hidden rounded-full border-2 border-black bg-black/40" aria-hidden>
+            <div className="ident-progress h-full bg-current" style={{ animationDuration: `${IDENT_MAX_MS}ms` }} />
+          </div>
         </div>
       </div>
     </div>

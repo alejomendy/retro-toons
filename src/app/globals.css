@@ -120,7 +120,20 @@ body {
 }
 .lower-third { animation: lower-third 8s ease-out forwards; }
 
+/* Placa entre capítulos: entra con un rebote chico y la barra marca el tope de espera */
+@keyframes ident-in {
+  0% { opacity: 0; transform: scale(0.92); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.ident-in { animation: ident-in 0.35s ease-out both; }
+@keyframes ident-progress {
+  from { width: 0; }
+  to { width: 100%; }
+}
+.ident-progress { animation: ident-progress linear forwards; }
+
 @media (prefers-reduced-motion: reduce) {
+  .ident-in, .ident-progress { animation: none; }
   .static-noise, .blink, .marquee, .osd-flash { animation: none; }
   .lower-third { animation: none; opacity: 0; }
   .zap { animation: none; opacity: 0; }

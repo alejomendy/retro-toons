@@ -215,7 +215,8 @@ export default function VideoPlayer({
 
         player.on("loadedmetadata", () => {
             window.clearTimeout(loadTimerRef.current);
-            const delay = isLive ? (Date.now() - requestedAtRef.current) / 1000 : 0;
+            // En vivo se suma lo que tardó en cargar, salvo que arranque desde el principio (capítulo que sigue a otro).
+            const delay = isLive && pendingSeekRef.current > 0 ? (Date.now() - requestedAtRef.current) / 1000 : 0;
             const seek = pendingSeekRef.current + delay;
             const duration = player.duration();
             pendingSeekRef.current = 0;
