@@ -253,14 +253,65 @@ export async function fetchGenres(): Promise<string[]> {
  * Fuentes en caché 3 h: las URLs firmadas de ok.ru vencen a las ~24 h, así que es seguro y
  * evita esperar de nuevo al addon (que tarda 5-30 s) al volver a abrir un episodio.
  */
+/** URL original detrás del proxy del addon (`/p/<base64url de {"u": ...}>.m3u8`), o la misma URL. */
+function unproxied(url: string): string {
+  const token = url.match(/\/p\/([A-Za-z0-9_-]+)/)?.[1];
+  if (!token) return url;
+  try {
+    const data: unknown = JSON.parse(Buffer.from(token, "base64url").toString("utf8"));
+    return isObj(data) ? (httpUrl(data.u) ?? url) : url;
+  } catch {
+    return url;
+  }
+}
+
+async function getText(url: string, ms: number): Promise<string | null> {
+  try {
+    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(ms) });
+    return res.ok ? await res.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ¿El servidor donde están los pedazos del video está caído? Algunos episodios (ej. la mitad de
+ * Los Simpsons) apuntan a un CDN que responde 5xx a todo: la lista de reproducción carga pero el
+ * video nunca. Se prueba el primer pedazo directo (sin pasar por el proxy, para no cargar al addon).
+ * Ante cualquier duda (timeout, formato raro) se da por viva: solo descarta caídas seguras.
+ */
+async function hlsHostIsDown(stream: LcStream): Promise<boolean> {
+  if (stream.kind !== "hls") return false;
+  const master = await getText(stream.url, 8000);
+  if (!master) return false;
+  const firstUrl = (text: string) => text.split("\n").map((l) => l.trim()).find((l) => /^https?:\/\//.test(l));
+  let playlist = master;
+  if (master.includes("#EXT-X-STREAM-INF")) {
+    const variant = firstUrl(master);
+    playlist = (variant && (await getText(variant, 8000))) || "";
+  }
+  const segment = firstUrl(playlist);
+  if (!segment) return false;
+  try {
+    const res = await fetch(unproxied(segment), { headers: { range: "bytes=0-1023" }, cache: "no-store", signal: AbortSignal.timeout(6000) });
+    await res.body?.cancel();
+    return res.status >= 500;
+  } catch {
+    return false;
+  }
+}
+
 const streamsCache = unstable_cache(
   async (episodeId: string) => {
-    const streams = await fetchStreams(episodeId);
+    const found = await fetchStreams(episodeId);
+    // Se descartan las fuentes cuyo video está en un servidor caído (las demás se prueban en paralelo).
+    const down = await Promise.all(found.map(hlsHostIsDown));
+    const streams = found.filter((_, i) => !down[i]);
     // Sin fuentes puede ser una falla pasajera del addon: se lanza para que no quede guardado 3 h.
     if (streams.length === 0) throw new LcError("NO_STREAMS");
     return streams;
   },
-  ["lacartoons-streams-v4"],
+  ["lacartoons-streams-v5"],
   { revalidate: 3 * 60 * 60 },
 );
 
