@@ -10,7 +10,7 @@ export default function Header() {
           <span className="chunky grid size-10 place-items-center rounded-lg bg-[#ff3ea5] text-white">
             <Tv className="size-6" />
           </span>
-          <span className="hidden min-[400px]:inline">
+          <span>
             Retro<span className="text-[#ff3ea5]">Toons</span>
           </span>
         </Link>

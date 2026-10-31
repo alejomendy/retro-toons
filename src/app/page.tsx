@@ -23,7 +23,8 @@ export default async function Home() {
   return (
     <OnAirProvider>
       <div className="space-y-14">
-        <section className="grid items-center gap-10 pt-2 lg:grid-cols-[1.05fr_1fr]">
+        {/* minmax(0, …): sin eso la columna crece hasta el título más largo de la tele y la página se sale de la pantalla en el celular. */}
+        <section className="grid grid-cols-[minmax(0,1fr)] items-center gap-10 pt-2 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
           <div className="space-y-6">
             <span className="sticker inline-block rounded-md bg-[#ff3ea5] px-2.5 py-0.5 font-mono text-xl uppercase text-white">
               La tele de la tarde · 90s y 2000s

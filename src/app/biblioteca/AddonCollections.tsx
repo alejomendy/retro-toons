@@ -38,7 +38,8 @@ async function CollectionRow({ collection }: { collection: AddonCollection }) {
       </SectionTitle>
       <p className="-mt-2 text-white/70">{collection.description}</p>
       <SeriesGrid>
-        {titles.slice(0, PREVIEW).map((t) => (
+        {/* En la vista previa, primero las que se pueden ver acá. */}
+        {[...titles.filter((t) => t.lacartoons), ...titles.filter((t) => !t.lacartoons)].slice(0, PREVIEW).map((t) => (
           <li key={`${t.type}:${t.id}`}>
             <AddonTitleCard title={t} />
           </li>

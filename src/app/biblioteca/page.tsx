@@ -24,18 +24,19 @@ export default async function BibliotecaPage() {
         Elegí cualquier serie y mirá el episodio que quieras, cuando quieras. Todo en español latino.
       </PageHeader>
       <ContinueWatching />
-      <NetworkCatalog />
+      {/* Primero lo que se busca y se ve acá mismo; después las formas de descubrir más. */}
       <section className="space-y-5" aria-labelledby="todas-las-series">
         <SectionTitle id="todas-las-series">Todas las series</SectionTitle>
         <Suspense>
           <BibliotecaClient genres={genres} />
         </Suspense>
       </section>
-      <Suspense fallback={<ExternalSeriesSkeleton />}>
-        <ExternalSeries />
-      </Suspense>
       <Suspense fallback={<AddonCollectionsSkeleton />}>
         <AddonCollections />
+      </Suspense>
+      <NetworkCatalog />
+      <Suspense fallback={<ExternalSeriesSkeleton />}>
+        <ExternalSeries />
       </Suspense>
       <AchievementsSection />
     </div>

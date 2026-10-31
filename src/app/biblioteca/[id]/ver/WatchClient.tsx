@@ -18,7 +18,7 @@ const NEXT_COUNTDOWN_SECONDS = 8;
 const HALLOWEEN_SEEN_KEY = "rt-halloween-vistos";
 
 interface Props {
-  series: { id: string; name: string; poster: string | null };
+  series: { id: string; name: string; poster: string | null; background?: string | null };
   videos: LcEpisode[];
   index: number;
   startAt: number;
@@ -134,6 +134,7 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay, 
               autoPlay={autoPlay}
               onProgress={handleProgress}
               onEnded={handleEnded}
+              poster={series.background}
             />
 
             {countdown !== null && upNext && (

@@ -35,6 +35,8 @@ type VideoPlayerProps = {
     onBreak?: (episodeId: string, index: number) => void;
     /** Mientras es true el video queda en pausa (la tanda); al volver a false sigue solo. */
     hold?: boolean;
+    /** Imagen de fondo antes de reproducir (el fondo apaisado de la serie): sin ella, un cuadro negro. */
+    poster?: string | null;
 };
 
 type VideoJsInstance = {
@@ -59,6 +61,7 @@ type VideoJsInstance = {
     };
     error: () => { code: number; message?: string } | null;
     on: (event: string, handler: () => void) => void;
+    poster: (src: string) => unknown;
 };
 
 /** Cada cuánto se informa el progreso mientras se reproduce. */
@@ -150,6 +153,7 @@ export default function VideoPlayer({
     breaks = false,
     onBreak,
     hold = false,
+    poster = null,
 }: VideoPlayerProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const playerRef = useRef<VideoJsInstance | null>(null);
@@ -334,6 +338,12 @@ export default function VideoPlayer({
             reportRef.current = () => {};
         };
     }, []);
+
+    // Póster (va después de crear el player: los efectos corren en orden).
+    useEffect(() => {
+        const player = playerRef.current;
+        if (player && !player.isDisposed()) player.poster(poster ?? "");
+    }, [poster]);
 
     // Consultar las fuentes del episodio.
     useEffect(() => {

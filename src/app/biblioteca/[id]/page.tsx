@@ -11,6 +11,7 @@ import PlayButton from "@/components/series/PlayButton";
 import EpisodeBrowser from "@/components/series/EpisodeBrowser";
 import StateMessage from "@/components/series/StateMessage";
 import { showById } from "@/data/shows";
+import { findTmdbArt } from "@/lib/tmdb";
 import LocalShowPage from "./LocalShowPage";
 
 type Params = Promise<{ id: string }>;
@@ -48,6 +49,9 @@ export default async function SeriePage({ params, searchParams }: { params: Para
   const { series } = result;
   const seasons = groupBySeason(series.videos);
   const first = series.videos[0];
+  // La misma búsqueda que eligió el arte (en caché): con su id se traen las imágenes de cada episodio.
+  const year = series.releaseInfo ? Number.parseInt(series.releaseInfo, 10) : null;
+  const tmdbId = (await findTmdbArt(series.name, Number.isFinite(year) ? year : null).catch(() => null))?.id ?? null;
 
   return (
     <div className="space-y-8">
@@ -93,7 +97,7 @@ export default async function SeriePage({ params, searchParams }: { params: Para
           Episodios
         </h2>
         {series.videos.length > 0 ? (
-          <EpisodeBrowser seriesId={series.id} videos={series.videos} />
+          <EpisodeBrowser seriesId={series.id} videos={series.videos} tmdbId={tmdbId} />
         ) : (
           <StateMessage tone="empty" title="Sin episodios">
             {lcErrorMessages.NO_EPISODES}

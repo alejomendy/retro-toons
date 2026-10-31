@@ -50,7 +50,7 @@ export default async function VerPage({ params, searchParams }: { params: Params
   const t = Number(query.t);
   return (
     <WatchClient
-      series={{ id: series.id, name: series.name, poster: series.poster }}
+      series={{ id: series.id, name: series.name, poster: series.poster, background: series.background }}
       videos={series.videos}
       index={index}
       startAt={Number.isFinite(t) && t > 0 ? t : 0}

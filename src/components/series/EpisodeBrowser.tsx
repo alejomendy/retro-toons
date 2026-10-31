@@ -14,12 +14,15 @@ export default function EpisodeBrowser({
   videos,
   currentId,
   variant = "grid",
+  tmdbId = null,
 }: {
   seriesId: string;
   videos: LcEpisode[];
   currentId?: string;
   /** "grid": página de la serie. "list": barra lateral del reproductor. */
   variant?: "grid" | "list";
+  /** Id de la serie en TMDB: si está, cada episodio muestra su propia imagen. */
+  tmdbId?: number | null;
 }) {
   const seasons = useMemo(() => groupBySeason(videos), [videos]);
   const initialSeason = videos.find((v) => v.id === currentId)?.season ?? seasons[0]?.season ?? 1;
@@ -27,6 +30,7 @@ export default function EpisodeBrowser({
   // Al pasar a un episodio de otra temporada, la lista lo acompaña.
   useEffect(() => setSeason(initialSeason), [initialSeason]);
   const episodes = seasons.find((s) => s.season === season)?.episodes ?? [];
+  const stills = useSeasonStills(variant === "grid" ? tmdbId : null, season, episodes.length);
   const progress = useContinueWatching().find((p) => p.seriesId === seriesId);
 
   return (
@@ -73,7 +77,9 @@ export default function EpisodeBrowser({
               >
                 {variant === "grid" && (
                   <div className="relative aspect-video w-32 shrink-0 overflow-hidden rounded-lg bg-black sm:w-36">
-                    {e.thumbnail && <Image src={e.thumbnail} alt="" fill sizes="144px" className="object-cover opacity-80 transition-opacity group-hover:opacity-100" />}
+                    {(stills.get(e.episode) ?? e.thumbnail) && (
+                      <Image src={(stills.get(e.episode) ?? e.thumbnail)!} alt="" fill sizes="144px" className="object-cover opacity-80 transition-opacity group-hover:opacity-100" />
+                    )}
                     <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                       <Play className="size-8 fill-white text-white drop-shadow" />
                     </span>
@@ -100,4 +106,41 @@ export default function EpisodeBrowser({
       </ol>
     </div>
   );
+}
+
+/** Imágenes de los episodios de una temporada (TMDB), por número de episodio. Se guardan por pestaña. */
+const stillsCache = new Map<string, Promise<Map<number, string>>>();
+
+function useSeasonStills(tmdbId: number | null, season: number, count: number): Map<number, string> {
+  const [stills, setStills] = useState<Map<number, string>>(() => new Map());
+  useEffect(() => {
+    setStills(new Map());
+    if (!tmdbId || count === 0) return;
+    const key = `${tmdbId}:${season}`;
+    if (!stillsCache.has(key)) {
+      stillsCache.set(
+        key,
+        fetch(`/api/catalog/series/${tmdbId}/seasons/${season}`)
+          .then((r) => (r.ok ? r.json() : null))
+          .then((body: { episodes?: { number: number; still: string | null }[] } | null) => {
+            const list = body?.episodes ?? [];
+            const byNumber = new Map(list.filter((e) => e.still).map((e) => [e.number, e.still!]));
+            if (list.length === count) return byNumber;
+            // Series de cortos (Coraje, Ed Edd y Eddy…): TMDB cuenta cada segmento y LACartoons los junta de a dos.
+            if (list.length === count * 2) {
+              return new Map(Array.from({ length: count }, (_, i) => [i + 1, byNumber.get(2 * i + 1)] as const).filter((e): e is readonly [number, string] => !!e[1]));
+            }
+            // Si TMDB numera la temporada distinto, mejor sin imágenes que con las de otro episodio.
+            return new Map<number, string>();
+          })
+          .catch(() => new Map<number, string>()),
+      );
+    }
+    let cancelled = false;
+    void stillsCache.get(key)!.then((map) => !cancelled && setStills(map));
+    return () => {
+      cancelled = true;
+    };
+  }, [tmdbId, season, count]);
+  return stills;
 }

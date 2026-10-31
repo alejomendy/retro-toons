@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { SectionTitle } from "@/components/PageHeader";
 import { ArrowLeft, ChevronDown, Clapperboard, ExternalLink, Loader2, Play, Search, Tv } from "lucide-react";
 
 type NetworkKey = "cartoon-network" | "disney-channel";
@@ -208,14 +209,13 @@ export default function NetworkCatalog() {
 
   return (
     <section className="space-y-5" aria-labelledby="catalogo-cadenas">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="font-mono text-sm uppercase tracking-[0.18em] text-accent">Explorador por cadena</p>
-          <h2 id="catalogo-cadenas" className="font-display text-3xl text-white sm:text-4xl">Cartoon Network & Disney Channel</h2>
-          <p className="mt-2 max-w-2xl text-sm text-white/65">Todo lo que pasaron las dos cadenas. Las marcadas con <strong className="text-white">▶ En RetroToons</strong> se ven acá mismo en español latino; el resto queda como ficha hasta que aparezca una fuente.</p>
-        </div>
-        <span className="rounded-lg border-2 border-black bg-accent px-3 py-1.5 font-mono text-sm font-bold text-black">{totalResults.toLocaleString("es-AR")} {onlyAvailable ? "para ver ahora" : "títulos"}</span>
-      </div>
+      <SectionTitle
+        id="catalogo-cadenas"
+        aside={<span className="rounded-lg border-2 border-black bg-accent px-3 py-1 font-mono text-lg leading-tight text-black">{totalResults.toLocaleString("es-AR")} {onlyAvailable ? "para ver ahora" : "títulos"}</span>}
+      >
+        Cartoon Network y Disney Channel
+      </SectionTitle>
+      <p className="-mt-2 max-w-2xl text-white/70">Todo lo que pasaron las dos cadenas. Las marcadas <strong className="text-white">▶ En RetroToons</strong> se ven acá mismo en español latino; el resto queda como ficha.</p>
 
       <div className="flex flex-wrap gap-2" role="tablist" aria-label="Elegir cadena">
         {NETWORKS.map((entry) => (

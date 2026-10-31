@@ -127,7 +127,7 @@ const KIDS_GENRES = [16, 10762];
  * Póster y fondo de TMDB para una serie de la que solo sabemos el nombre (ej. el de LACartoons).
  * Solo acepta un resultado animado/infantil cuyo nombre se parezca de verdad: mejor sin imagen que con la de otra serie.
  */
-export async function findTmdbArt(name: string, year?: number | null): Promise<{ poster: string | null; backdrop: string | null } | null> {
+export async function findTmdbArt(name: string, year?: number | null): Promise<{ id: number; poster: string | null; backdrop: string | null } | null> {
   type Hit = { id: number; name: string; original_name: string; poster_path: string | null; backdrop_path: string | null; genre_ids: number[]; first_air_date?: string };
   type Res = { results: Hit[] };
   const query = name.replace(/\s*[:(].*$/, "").trim() || name;
@@ -144,6 +144,7 @@ export async function findTmdbArt(name: string, year?: number | null): Promise<{
   const hit = scored[0]?.h;
   if (!hit) return null;
   return {
+    id: hit.id,
     poster: hit.poster_path ? `${IMG}/w342${hit.poster_path}` : null,
     backdrop: hit.backdrop_path ? `${IMG}/w1280${hit.backdrop_path}` : null,
   };

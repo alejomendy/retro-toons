@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bungee, Nunito, VT323 } from "next/font/google";
 import Header from "@/components/Header";
+import { BottomNav } from "@/components/NavLinks";
 import AchievementToast from "@/components/AchievementToast";
 import "./globals.css";
 
@@ -29,9 +30,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           {children}
         </main>
         <AchievementToast />
-        <footer className="border-t-4 border-black bg-black/40 py-6 text-center font-mono text-lg text-white/65">
+        {/* En el celular deja lugar para la barra de pestañas fija de abajo. */}
+        <footer className="border-t-4 border-black bg-black/40 py-6 pb-24 text-center font-mono text-lg text-white/65 sm:pb-6">
           RetroToons · Proyecto de fans · Las series y marcas pertenecen a sus respectivos dueños
         </footer>
+        <BottomNav />
       </body>
     </html>
   );

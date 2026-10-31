@@ -27,7 +27,7 @@ export default function AchievementToast() {
   }, []);
 
   return (
-    <div aria-live="polite" className="pointer-events-none fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+    <div aria-live="polite" className="pointer-events-none fixed bottom-20 left-1/2 z-50 sm:bottom-4 -translate-x-1/2">
       {shown && (
         <div key={shown.id} className="lower-third chunky pointer-events-auto flex items-center gap-3 rounded-xl bg-accent px-4 py-3 text-black">
           <span className="text-3xl" aria-hidden>
