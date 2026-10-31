@@ -76,13 +76,17 @@ export function normalize(name: string): string {
     .trim();
 }
 
+/** " tortuga ninja ": palabras sin la s final, con espacios en los bordes para comparar palabras enteras. */
+const wordKey = (key: string) => ` ${key.split(" ").map((w) => w.replace(/s$/, "")).join(" ")} `;
+
 /** Busca una serie del catálogo por cualquiera de sus nombres: primero exacto, después la coincidencia más corta. */
 function findByName(names: string[], catalog: { series: LcSeriesSummary; key: string }[]): LcSeriesSummary | undefined {
   const keys = names.map(normalize).filter((k) => k.length >= 3);
   const exact = catalog.find((c) => keys.includes(c.key));
   if (exact) return exact.series;
   const partial = catalog
-    .filter((c) => c.key.length >= 4 && keys.some((k) => c.key.includes(k) || k.includes(c.key)))
+    // Por palabras enteras ("x s" de The X's no es parte de "max steel"), sin la s del plural (Ninja/Ninjas).
+    .filter((c) => c.key.length >= 4 && keys.some((k) => wordKey(c.key).includes(wordKey(k)) || wordKey(k).includes(wordKey(c.key))))
     .sort((a, b) => a.key.length - b.key.length);
   return partial[0]?.series;
 }

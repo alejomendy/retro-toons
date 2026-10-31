@@ -78,6 +78,10 @@ La búsqueda nueva por episodio requiere que `YOUTUBE_CHANNEL_IDS` contenga cana
 
 Los episodios a demanda de Pluto TV se reproducen en la página con `hls.js`. Pluto solo deja leer sus listas `.m3u8` desde pluto.tv (CORS), así que `/api/hls` hace de proxy **solo de las listas** (restringido a dominios de Pluto); los segmentos van directo de Pluto al navegador, con sus cortes publicitarios. Son endpoints no documentados: si Pluto cambia su web, hay que ajustar `src/lib/pluto.ts`.
 
+Cada episodio se cruza con Pluto por **nombre**, por **orden** si la serie tiene la misma cantidad de episodios, o por **temporada y número** si Pluto no tiene más episodios en esa temporada que TMDB (muchas series de Pluto vienen con títulos genéricos o traducidos distinto). En series de cortos (`episodeMinutes` ≤ 12) el número no se usa: TMDB cuenta cada segmento y Pluto los junta.
+
+Desde Pluto (Latinoamérica, audio en español) se suman series que LACartoons no tiene: *Tak y el Poder de Juju*, *La Granja*, *Los X*, *Inuyasha*, *Hunter x Hunter*, *Bakugan*, *Capitán Tsubasa*, *La Vuelta al Mundo de Willy Fog* y *David el Gnomo*. Para sumar otra: buscala en el catálogo a demanda de Pluto, confirmá que LACartoons no la tenga (por nombre en español) y agregala a `shows.ts` con su `tmdbId`; Pluto la encuentra por `title` u `originalTitle` (tienen que coincidir con el nombre en Pluto, sin el «LT»).
+
 > No existe una API legal que entregue episodios completos doblados al latino. Solo se usan canales oficiales, Pluto TV y videos sobre los que se tengan derechos (`src/data/videos.ts`).
 
 ## Limitaciones

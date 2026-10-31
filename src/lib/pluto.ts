@@ -189,6 +189,18 @@ const seriesEpisodes = unstable_cache(
   { revalidate: ONE_DAY },
 );
 
+/**
+ * Misma temporada y mismo número de episodio. Solo si Pluto no tiene más episodios en esa
+ * temporada que TMDB (señal de que numeran igual): muchas series de Pluto vienen sin el título
+ * real ("Episodio 3") o con títulos traducidos distinto, y el número es lo único que coincide.
+ */
+function bySeasonNumber(eps: PlutoEpisode[], position?: PlutoPosition): PlutoEpisode | undefined {
+  if (!position?.season || !position.numberInSeason || !position.seasonTotal) return undefined;
+  const inSeason = eps.filter((e) => e.season === position.season);
+  if (inSeason.length === 0 || inSeason.length > position.seasonTotal) return undefined;
+  return inSeason.find((e) => e.number === position.numberInSeason);
+}
+
 /** "Episodio 3", "Capítulo 12": Pluto no tiene el título real. */
 const GENERIC_NAME = /^(episodio|capitulo|cap)\s*\d+$/;
 
@@ -255,7 +267,17 @@ function titleKey(title: string): string {
     .join("");
 }
 
-export type PlutoFinder = (episodeNames: string[], position?: { number: number; total: number }) => PlutoMatch | null;
+export interface PlutoPosition {
+  /** Número absoluto del episodio y total de la serie (en la biblioteca). */
+  number: number;
+  total: number;
+  /** Temporada, número dentro de ella y cuántos episodios tiene esa temporada en TMDB (si se sabe). */
+  season?: number;
+  numberInSeason?: number;
+  seasonTotal?: number;
+}
+
+export type PlutoFinder = (episodeNames: string[], position?: PlutoPosition) => PlutoMatch | null;
 
 /**
  * Carga una vez los episodios de Pluto de una serie y devuelve un buscador
@@ -295,7 +317,7 @@ export async function plutoMatcher(seriesNames: string[]): Promise<PlutoFinder |
             })
           : undefined;
       const byPosition = position && eps.length === position.total ? eps[position.number - 1] : undefined;
-      const hit = byName ?? byPosition;
+      const hit = byName ?? byPosition ?? bySeasonNumber(eps, position);
       if (hit) {
         return {
           webUrl: `${WEB}/on-demand/series/${slug}/season/${hit.season}/episode/${hit.slug}`,

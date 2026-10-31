@@ -204,7 +204,7 @@ export async function getFullEpisode(show: Show, number: number): Promise<Episod
   const tmdb = await loadTmdb(show);
   const t = (await tmdbEpisodes(show, tmdb, [number])).episodes.get(number);
   const episode = toEpisode(getEpisode(show, number), t);
-  return { ...episode, source: await resolveSource(show, episode, tmdb?.name, episodeNamesOf(t)) };
+  return { ...episode, source: await resolveSource(show, episode, tmdb?.name, episodeNamesOf(t), seasonCountsOf(tmdb)) };
 }
 
 function seriesNames(show: Show, localTitle?: string | null): string[] {
@@ -218,7 +218,12 @@ type SourceFinder = (episode: Episode, episodeNames: string[]) => VideoSource | 
  * data/videos.ts → canales oficiales de YouTube → Pluto TV.
  * Devuelve null si la serie no tiene ninguna.
  */
-async function sourceFinder(show: Show, localTitle?: string | null): Promise<SourceFinder | null> {
+/** Episodios por temporada según TMDB (para cruzar con Pluto por temporada y número). */
+function seasonCountsOf(tmdb: TmdbShow | null): Map<number, number> | undefined {
+  return tmdb ? new Map(tmdb.seasons.map((s) => [s.number, s.episodeCount])) : undefined;
+}
+
+async function sourceFinder(show: Show, localTitle?: string | null, seasonCounts?: Map<number, number>): Promise<SourceFinder | null> {
   const [official, pluto] = await Promise.all([
     show.youtubeChannels?.length ? channelMatcher(show.youtubeChannels) : null,
     show.pluto === false ? null : plutoMatcher(seriesNames(show, localTitle)),
@@ -236,7 +241,12 @@ async function sourceFinder(show: Show, localTitle?: string | null): Promise<Sou
       matchByNumber: show.matchByNumber ?? true,
     });
     if (video) return video;
-    const p = pluto?.(names, { number: episode.number, total: show.episodeCount });
+    const p = pluto?.(names, {
+      number: episode.number,
+      total: show.episodeCount,
+      // En series de cortos TMDB cuenta cada segmento y Pluto los junta: ahí el número no sirve.
+      ...(show.episodeMinutes > 12 && episode.season != null && { season: episode.season, numberInSeason: episode.numberInSeason, seasonTotal: seasonCounts?.get(episode.season) }),
+    });
     return p ? { type: "hls", url: p.streamUrl, pageUrl: p.webUrl } : undefined;
   };
 }
@@ -265,7 +275,7 @@ const available = new Map<string, { at: number; value: Promise<number[]> }>();
 
 async function computeAvailable(show: Show): Promise<number[]> {
   const tmdb = await loadTmdb(show);
-  const find = await sourceFinder(show, tmdb?.name);
+  const find = await sourceFinder(show, tmdb?.name, seasonCountsOf(tmdb));
   if (!find) return [];
   const numbers = getEpisodes(show).map((e) => e.number);
   const { episodes } = await tmdbEpisodes(show, tmdb, numbers);
@@ -284,8 +294,9 @@ export async function resolveSource(
   episode: Episode,
   localTitle?: string,
   episodeNames: string[] = [],
+  seasonCounts?: Map<number, number>,
 ): Promise<VideoSource | undefined> {
-  const own = (await sourceFinder(show, localTitle))?.(episode, episodeNames);
+  const own = (await sourceFinder(show, localTitle, seasonCounts))?.(episode, episodeNames);
   if (own) return own;
   // Sin ningún nombre de episodio no hay forma de verificar que un video de búsqueda sea el correcto.
   if (episodeNames.length === 0) return undefined;

@@ -71,7 +71,7 @@ const lacartoonsIndex = unstable_cache(
  * Series locales que se ven desde YouTube oficial o Pluto TV. Armar la lista consulta esas fuentes
  * serie por serie (puede tardar minutos en frío), por eso va en su propia caché.
  */
-const externalIds = unstable_cache(async (): Promise<string[]> => (await getExternalSeries()).map((s) => s.id), ["retrotoons-external-ids-v1"], {
+const externalIds = unstable_cache(async (): Promise<string[]> => (await getExternalSeries()).map((s) => s.id), ["retrotoons-external-ids-v2"], {
   revalidate: CACHE_SECONDS,
 });
 
