@@ -1,5 +1,5 @@
 /**
- * Addons de Stremio. `tab`: cómo aparece en /addons — "catalog" (se recorren sus catálogos),
+ * Addons de Stremio. `description`: lo que se muestra en /addons (los manifiestos vienen en inglés). `tab`: cómo aparece en /addons — "catalog" (se recorren sus catálogos),
  * "torrentio" (buscador de fuentes) o null (auxiliar, sin pestaña).
  */
 export const STREMIO_ADDONS = {
@@ -7,18 +7,21 @@ export const STREMIO_ADDONS = {
     id: "cartoon-network",
     name: "Cartoon Network",
     baseUrl: "https://e1fc7808b5de-stremio-cartoon-network.baby-beamup.club",
+    description: "Todas las series y películas de Cartoon Network, de los Cartoon Cartoons a las de hoy.",
     tab: "catalog",
   },
   springfield: {
     id: "springfield-3000",
     name: "Springfield 3000",
     baseUrl: "https://springfield-3000.ak-forge.workers.dev",
+    description: "Los Simpson y Futurama: películas y sagas temáticas con los episodios en orden.",
     tab: "catalog",
   },
   scplus: {
     id: "scplus",
     name: "SCPlus",
     baseUrl: "https://scplus.duckdns.org/c.012e984ad8a7752b37f74559b5917fe798378a70",
+    description: "Animación de los 80, 90 y 2000, ordenada por década.",
     tab: "catalog",
   },
   // Catálogos de animación curados de TMDB (ids de IMDb, en inglés: se pasan al español con TMDB).
@@ -26,12 +29,14 @@ export const STREMIO_ADDONS = {
     id: "animvault",
     name: "AnimVault",
     baseUrl: "https://animvault.onrender.com",
+    description: "Dibujos clásicos, series y películas animadas elegidas de TMDB.",
     tab: "catalog",
   },
   torrentio: {
     id: "torrentio",
     name: "Torrentio",
     baseUrl: "https://torrentio.strem.fun",
+    description: "Busca fuentes por título y episodio (no publica catálogo).",
     tab: "torrentio",
   },
   // Metadatos y búsqueda para Torrentio (no es una fuente de video).
@@ -39,6 +44,7 @@ export const STREMIO_ADDONS = {
     id: "cinemeta",
     name: "Cinemeta",
     baseUrl: "https://v3-cinemeta.strem.io",
+    description: "Metadatos y búsqueda para Torrentio.",
     tab: null,
   },
 } as const;

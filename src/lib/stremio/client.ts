@@ -4,6 +4,7 @@ import { findByImdb, getTmdbTitle, type TmdbTitle } from "@/lib/tmdb";
 import { cachedSeries, catalogMatcher } from "@/lib/lacartoons-schedule";
 import { normalize } from "@/lib/text";
 import { findWatchable } from "@/lib/availability";
+import { isAllowedImage } from "@/lib/image-hosts";
 import { getAddonCollection, getStremioAddon, STREMIO_ADDONS, type StremioAddonKey } from "./addons";
 import type { AddonEpisode, AddonTitle, StremioCatalogResponse, StremioManifest, StremioMetaPreview, StremioMetaResponse, StremioVideo } from "./types";
 
@@ -68,7 +69,8 @@ function cleanImage(url: string | undefined): string | null {
   } catch {
     return null;
   }
-  return url;
+  // Un servidor que next/image no acepta rompería la página: mejor sin póster.
+  return isAllowedImage(url) ? url : null;
 }
 
 /** Id de TMDB de los formatos de los addons: "tmdb:123" o "tmdb:series:123". */

@@ -152,8 +152,8 @@ export default function AddonsClient() {
           {manifest && (
             <div className="chunky flex flex-wrap items-center gap-3 rounded-xl bg-panel p-3">
               <div className="min-w-0 flex-1 basis-60">
-                <p className="font-bold">{manifest.name}</p>
-                <p className="text-sm text-white/60">{manifest.description || `Versión ${manifest.version}`}</p>
+                <p className="font-bold">{addon.name}</p>
+                <p className="text-sm text-white/60">{addon.description}</p>
               </div>
               <select
                 aria-label="Catálogo"

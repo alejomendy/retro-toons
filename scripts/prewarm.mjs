@@ -4,6 +4,8 @@
  * arranca al instante en vez de esperar al addon (5-30 s por episodio en el plan gratis).
  * Pide a la app la grilla de hoy (hora de Argentina) y, para el programa actual y el siguiente de
  * cada canal, pide sus fuentes: eso las guarda 3 h en la caché del servidor.
+ * Después visita las páginas que arman cachés pesadas (catálogo, disponibilidad, colecciones):
+ * en caliente tardan milisegundos; si una venció, se rehace acá y no la espera ningún visitante.
  *
  * Uso:  SITE_URL=https://retro-toons.vercel.app node scripts/prewarm.mjs
  * Lo corre .github/workflows/prewarm.yml cada 30 minutos (10 minutos antes de cada cambio de programa).
@@ -55,3 +57,21 @@ for (const ep of episodes) {
   }
 }
 console.log(`Listo: ${ok}/${episodes.length} episodios con fuentes en caché.`);
+
+// Páginas con cachés pesadas: de a una, después de la tele (que tiene prioridad sobre el addon).
+const PAGES = [
+  "/biblioteca",
+  "/api/catalog/networks?network=cartoon-network&page=1&disponibles=1",
+  "/api/catalog/networks?network=disney-channel&page=1&disponibles=1",
+  ...["sagas-de-springfield", "peliculas-animadas", "cartoon-network", "animacion-80s", "animacion-90s", "animacion-2000s"].map((slug) => `/colecciones/${slug}`),
+];
+for (const path of PAGES) {
+  const started = Date.now();
+  try {
+    const res = await fetch(`${SITE}${path}`, { signal: AbortSignal.timeout(120_000) });
+    await res.arrayBuffer();
+    console.log(`${path}: HTTP ${res.status} en ${Math.round((Date.now() - started) / 1000)} s`);
+  } catch (error) {
+    console.log(`${path}: error ${error.message}`);
+  }
+}
