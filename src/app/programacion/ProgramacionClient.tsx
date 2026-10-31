@@ -285,7 +285,8 @@ function tvChannel(id: ChannelId) {
 function ChannelBanner({ channelId }: { channelId: ChannelId }) {
   const c = channelById[channelId];
   return (
-    <div className="chunky flex flex-wrap items-center gap-x-5 gap-y-2 overflow-hidden rounded-xl px-4 py-3" style={{ backgroundColor: c.color, color: c.ink }}>
+    // En el celular no se muestra: el canal ya se ve en su pestaña y en la tele, y así la tele queda arriba.
+    <div className="chunky hidden flex-wrap items-center gap-x-5 gap-y-2 overflow-hidden rounded-xl px-4 py-3 sm:flex" style={{ backgroundColor: c.color, color: c.ink }}>
       <span className="osd font-mono text-5xl leading-none">CH {channelNumber(channelId)}</span>
       <div className="min-w-0 flex-1">
         <p className="inline-block rounded-md border-2 border-black bg-white px-2 py-1">
