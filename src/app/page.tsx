@@ -7,6 +7,7 @@ import ContinueWatching from "@/components/series/ContinueWatching";
 import HalloweenSpecials from "@/components/series/HalloweenSpecials";
 import SurpriseButton from "@/components/series/SurpriseButton";
 import { SectionTitle } from "@/components/PageHeader";
+import { GENRE_LOGOS, GenreLogo } from "@/components/ChannelBrand";
 import { HeroTv, OnAirChannels, OnAirTicker } from "./HomeLive";
 
 // Página estática que se renueva cada hora: la CDN la sirve al instante (lo que está al aire se carga en el navegador).
@@ -93,6 +94,7 @@ export default async function Home() {
             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {genres.map((g, i) => {
                 const brand = brandByGenre.get(g);
+                const logo = !!GENRE_LOGOS[g];
                 return (
                   <li key={g}>
                     <Link
@@ -100,9 +102,16 @@ export default async function Home() {
                       className={`chunky flex h-full min-h-20 items-end rounded-xl p-4 font-display text-lg leading-tight transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent ${
                         i % 2 ? "hover:rotate-1" : "hover:-rotate-1"
                       }`}
-                      style={{ backgroundColor: brand?.bg ?? "#2a1a4d", color: brand?.ink ?? "#fdf6e3" }}
+                      style={logo ? { backgroundColor: "#fff", color: "#000", borderBottom: `6px solid ${brand?.bg ?? "#000"}` } : { backgroundColor: brand?.bg ?? "#2a1a4d", color: brand?.ink ?? "#fdf6e3" }}
+                      aria-label={logo ? g : undefined}
                     >
-                      {g}
+                      {logo ? (
+                        <span className="grid w-full place-items-center">
+                          <GenreLogo genre={g} height={30} />
+                        </span>
+                      ) : (
+                        g
+                      )}
                     </Link>
                   </li>
                 );

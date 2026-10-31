@@ -8,6 +8,7 @@ import { channelNumber } from "@/data/channels";
 import { formatTime } from "@/lib/schedule";
 import { episodeLabel } from "@/lib/lacartoons-types";
 import { useOnAir, type OnAir } from "@/lib/use-on-air";
+import { ChannelChip, ChannelIdentAnimation, ChannelLogo, ChannelWordmark } from "@/components/ChannelBrand";
 import { getLastChannel } from "@/lib/user-library";
 
 /** Cada cuánto la tele del inicio cambia sola de canal (hasta que el usuario elige uno). */
@@ -43,7 +44,7 @@ export function HeroTv() {
         <Link
           href={`/programacion?canal=${channel.id}`}
           aria-label={`Sintonizar ${channel.name}${current ? `: ahora ${current.series.name}` : ""}`}
-          className="scanlines group relative block aspect-video overflow-hidden rounded-[1.5rem] bg-black shadow-[inset_0_0_60px_rgba(0,0,0,0.9)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+          className="scanlines group relative block aspect-video overflow-hidden rounded-[1.5rem] bg-black shadow-[inset_0_0_60px_rgba(0,0,0,0.9)] [container-type:inline-size] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
         >
           <Screen item={item} />
           {/* Al cambiar de canal, el número aparece arriba como en la tele de tubo */}
@@ -53,11 +54,9 @@ export function HeroTv() {
           <span className="absolute left-4 top-4 z-10 flex items-center gap-2 rounded bg-red-500 px-2 py-0.5 font-mono text-xl text-white">
             <span className="blink size-2.5 rounded-full bg-white" /> EN VIVO
           </span>
-          <span
-            className="absolute bottom-3 right-3 z-10 rounded border-2 border-black px-2 font-display text-xs opacity-90 sm:text-sm"
-            style={{ backgroundColor: channel.color, color: channel.ink }}
-          >
-            {channel.name}
+          {/* Marca de agua del canal, como en la tele. */}
+          <span className="absolute bottom-3 right-3 z-10 opacity-80">
+            <ChannelWordmark id={channel.id} size="sm" />
           </span>
         </Link>
         <div className="mt-3 flex items-center justify-between gap-3 px-1">
@@ -86,13 +85,12 @@ export function HeroTv() {
             }}
             aria-pressed={i === index}
             title={c.name}
-            className={`chunky flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-xl transition-transform focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white ${
-              i === index ? "-translate-y-1 ring-4 ring-accent" : "opacity-75 hover:opacity-100"
+            className={`chunky grid h-11 place-items-center rounded-lg border-b-4 bg-white px-2.5 transition-transform focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white ${
+              i === index ? "-translate-y-1 ring-4 ring-accent" : "opacity-70 hover:opacity-100"
             }`}
-            style={{ backgroundColor: c.color, color: c.ink }}
+            style={{ borderBottomColor: c.color === "#f2f2f2" ? "#111" : c.color }}
           >
-            {channelNumber(c.id)}
-            <span className="hidden font-display text-xs sm:inline">{c.name}</span>
+            <ChannelLogo id={c.id} height={18} />
           </button>
         ))}
       </div>
@@ -118,19 +116,17 @@ function Screen({ item }: { item: OnAir }) {
       </>
     );
   }
-  return (
-    <>
-      <div className="static-noise absolute inset-0 opacity-60" />
-      <div className="absolute inset-0 grid place-items-center p-6 text-center">
-        <div className="rounded-lg bg-black/75 px-6 py-4">
-          <p className="font-display text-xl text-white sm:text-3xl">{status === "error" ? "Sin señal" : "Sintonizando…"}</p>
-          <p className="font-mono text-xl" style={{ color: channel.color === "#111111" ? "#ffd400" : channel.color }}>
-            {channel.name}
-          </p>
+  if (status === "error") {
+    return (
+      <>
+        <div className="static-noise absolute inset-0 opacity-60" />
+        <div className="absolute inset-0 grid place-items-center p-6 text-center">
+          <p className="rounded-lg bg-black/75 px-6 py-4 font-display text-xl text-white sm:text-3xl">Sin señal</p>
         </div>
-      </div>
-    </>
-  );
+      </>
+    );
+  }
+  return <ChannelIdentAnimation key={channel.id} id={channel.id} />;
 }
 
 /** Cinta tipo noticiero con lo que pasa en todos los canales. */
@@ -141,9 +137,7 @@ export function OnAirTicker() {
   const items = (copy: string) =>
     onAir.map(({ channel, current }) => (
     <span key={`${copy}-${channel.id}`} className="mx-6 inline-flex items-center gap-2" aria-hidden={copy === "b" || undefined}>
-      <span className="rounded border-2 border-black px-1.5 font-display text-xs" style={{ backgroundColor: channel.color, color: channel.ink }}>
-        {channel.name}
-      </span>
+      <ChannelChip id={channel.id} height={14} />
       <span className="font-bold">{current!.series.name}</span>
       <span className="text-black/60">· {current!.episode.title}</span>
     </span>
@@ -174,8 +168,8 @@ export function OnAirChannels() {
             href={`/programacion?canal=${channel.id}`}
             className="chunky group flex h-full flex-col overflow-hidden rounded-xl bg-panel transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
           >
-            <div className="flex items-center justify-between gap-2 border-b-4 border-black px-4 py-2" style={{ backgroundColor: channel.color, color: channel.ink }}>
-              <span className="font-display text-lg leading-tight">{channel.name}</span>
+            <div className="flex items-center justify-between gap-2 border-b-4 border-black px-3 py-2" style={{ backgroundColor: channel.color, color: channel.ink }}>
+              <ChannelChip id={channel.id} height={22} />
               <span className="font-mono text-2xl leading-none opacity-90">CH {channelNumber(channel.id)}</span>
             </div>
             <div className="flex flex-1 gap-3 p-3">

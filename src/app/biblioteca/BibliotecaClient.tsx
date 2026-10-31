@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { GENRE_LOGOS, GenreLogo } from "@/components/ChannelBrand";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Heart, Loader2, Search, X } from "lucide-react";
 import { channels } from "@/data/channels";
@@ -159,11 +160,17 @@ export default function BibliotecaClient({ genres }: { genres: string[] }) {
           <Chip active={showFavorites} onClick={() => setFilter(FAVORITES)} bg="#ff3ea5" ink="#fff">
             <Heart className="size-3.5 fill-current" aria-hidden /> Mis favoritos{favorites.length > 0 && ` (${favorites.length})`}
           </Chip>
-          {genres.map((g) => (
-            <Chip key={g} active={filter === g} onClick={() => setFilter(g)} {...brandByGenre.get(g)}>
-              {g}
-            </Chip>
-          ))}
+          {genres.map((g) =>
+            GENRE_LOGOS[g] ? (
+              <Chip key={g} active={filter === g} onClick={() => setFilter(g)} label={g}>
+                <GenreLogo genre={g} height={16} />
+              </Chip>
+            ) : (
+              <Chip key={g} active={filter === g} onClick={() => setFilter(g)} {...brandByGenre.get(g)}>
+                {g}
+              </Chip>
+            ),
+          )}
         </div>
       </div>
 
@@ -290,12 +297,14 @@ function GenreBadge({ genre }: { genre: string }) {
   );
 }
 
-function Chip({ active, onClick, children, bg, ink }: { active: boolean; onClick: () => void; children: React.ReactNode; bg?: string; ink?: string }) {
+function Chip({ active, onClick, children, bg, ink, label }: { active: boolean; onClick: () => void; children: React.ReactNode; bg?: string; ink?: string; label?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
+      aria-label={label}
+      title={label}
       className={`inline-flex items-center gap-1 rounded-full border-2 border-black px-3 py-1 text-sm font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white ${active ? "ring-4 ring-accent" : "opacity-75 hover:opacity-100"}`}
       style={{ backgroundColor: bg ?? (active ? "#ffd400" : "#fff"), color: ink ?? "#000" }}
     >

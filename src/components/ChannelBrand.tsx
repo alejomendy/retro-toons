@@ -130,10 +130,44 @@ export function ChannelWordmark({ id, size = "lg", animate = false }: { id: Chan
   );
 }
 
-/** El logo tal cual (a color), para las pestañas de canales y otras listas. */
-export function ChannelLogo({ id, className = "h-8 w-auto" }: { id: ChannelId; className?: string }) {
+/** Los logos casi cuadrados (Jetix, Disney, Warner) se ven chicos al lado de los apaisados: van más altos. */
+const TALL: ChannelId[] = ["jetix", "disney", "warner"];
+
+/** El logo tal cual (a color). `height` en px para los apaisados; los altos se agrandan para equilibrar. */
+export function ChannelLogo({ id, height = 28, className = "" }: { id: ChannelId; height?: number; className?: string }) {
   const logo = CHANNEL_LOGOS[id];
-  return <Image src={logo.src} alt={channelNames[id]} width={logo.width} height={logo.height} unoptimized className={className} />;
+  const h = TALL.includes(id) ? Math.round(height * 1.6) : height;
+  return (
+    <Image src={logo.src} alt={channelNames[id]} width={logo.width} height={logo.height} unoptimized className={`w-auto max-w-none ${className}`} style={{ height: h }} />
+  );
+}
+
+/** Logo del canal sobre una placa blanca con borde (se lee sobre cualquier fondo). */
+export function ChannelChip({ id, height = 22, className = "" }: { id: ChannelId; height?: number; className?: string }) {
+  return (
+    <span className={`inline-grid place-items-center rounded-md border-2 border-black bg-white px-1.5 py-0.5 ${className}`}>
+      <ChannelLogo id={id} height={height} />
+    </span>
+  );
+}
+
+/** Logos de las cadenas del catálogo de LACartoons (para la biblioteca). */
+export const GENRE_LOGOS: Record<string, { src: string; width: number; height: number } | ChannelId> = {
+  "Cartoon Network": "cartoon-network",
+  Nickelodeon: "nickelodeon",
+  Disney: "disney",
+  "Warner Channel": "warner",
+  "Fox Kids": { src: "https://upload.wikimedia.org/wikipedia/commons/f/fa/FOX_Kids_logo.svg", width: 200, height: 176 },
+  "Hanna Barbera": { src: "https://upload.wikimedia.org/wikipedia/commons/c/c0/Hanna-Barbera.svg", width: 585, height: 344 },
+  Marvel: { src: "https://upload.wikimedia.org/wikipedia/commons/b/b9/Marvel_Logo.svg", width: 1000, height: 402 },
+};
+
+/** Logo de una cadena del catálogo (si hay); `null` si no tiene (se muestra el nombre). */
+export function GenreLogo({ genre, height = 18 }: { genre: string; height?: number }) {
+  const g = GENRE_LOGOS[genre];
+  if (!g) return null;
+  if (typeof g === "string") return <ChannelLogo id={g} height={height} />;
+  return <Image src={g.src} alt={genre} width={g.width} height={g.height} unoptimized className="w-auto max-w-none" style={{ height: Math.round(height * 1.6) }} />;
 }
 
 /** Animación de entrada de cada logo (clases wm-* de globals.css). */

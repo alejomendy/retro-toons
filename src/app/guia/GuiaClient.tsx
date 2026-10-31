@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { channelNumber, channels } from "@/data/channels";
+import { ChannelChip } from "@/components/ChannelBrand";
 import { formatTime, minutesNow } from "@/lib/schedule";
 import { episodeLabel, watchHref, type LcSlot } from "@/lib/lacartoons-types";
 import { prefetchStreams } from "@/lib/prefetch-streams";
@@ -119,8 +120,8 @@ export default function GuiaClient() {
                     style={{ width: CHANNEL_COL, backgroundColor: c.color, color: c.ink }}
                     title={`Sintonizar ${c.name}`}
                   >
-                    <span className="font-mono text-xl leading-none opacity-80">CH {channelNumber(c.id)}</span>
-                    <span className="truncate font-display text-xs leading-tight sm:text-sm">{c.name}</span>
+                    <span className="font-mono text-lg leading-none opacity-80">CH {channelNumber(c.id)}</span>
+                    <ChannelChip id={c.id} height={20} className="self-start" />
                   </Link>
                   <div className="relative h-20 flex-1">
                     {grid === undefined && <div className="absolute inset-2 animate-pulse rounded-lg bg-white/5" />}

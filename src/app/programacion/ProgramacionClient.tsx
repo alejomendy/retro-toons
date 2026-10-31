@@ -17,7 +17,7 @@ import VideoPlayer from "@/components/LazyVideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
 import { episodeLabel, lcErrorMessages, seriesHref, watchHref, type LcSlot } from "@/lib/lacartoons-types";
 import type { ChannelId } from "@/lib/types";
-import { brandBackground, CHANNEL_BRANDS, ChannelLogo, ChannelWordmark } from "@/components/ChannelBrand";
+import { brandBackground, CHANNEL_BRANDS, ChannelIdentAnimation, ChannelLogo, ChannelWordmark } from "@/components/ChannelBrand";
 
 type Grid = { key: string; slots: LcSlot[] } | { key: string; error: string };
 
@@ -120,6 +120,7 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
   return (
     <div className="space-y-6">
       <PageHeader
+        compact
         kicker={`Estás viendo · CH ${channelNumber(channelId)}`}
         title="Programación del día"
         kickerColor={channel.color}
@@ -152,7 +153,7 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
               <TvPlayer
                 title={error ? "Sin señal" : "Sintonizando..."}
                 subtitle={channel.name}
-                overlay={error ? <NoSignal title="Sin señal" subtitle={error} hint={null} /> : <Tuning channelName={channel.name} />}
+                overlay={error ? <NoSignal title="Sin señal" subtitle={error} hint={null} /> : <ChannelIdentAnimation key={channelId} id={channelId} />}
                 channel={tvChannel(channelId)}
                 cinema={cinema}
                 onCinemaChange={setCinema}
@@ -173,21 +174,6 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
         </section>
 
         <WeekGuide channelId={channelId} now={now} todaySlots={slots} current={current} loading={!loaded} />
-      </div>
-    </div>
-  );
-}
-
-/** Pantalla mientras llega la grilla (no es "sin señal": todavía no sabemos qué pasa). */
-function Tuning({ channelName }: { channelName: string }) {
-  return (
-    <div className="absolute inset-0">
-      <div className="static-noise absolute inset-0 opacity-60" />
-      <div className="absolute inset-0 grid place-items-center p-6 text-center">
-        <div className="rounded-lg bg-black/75 px-6 py-4">
-          <p className="font-display text-xl text-white sm:text-3xl">Sintonizando…</p>
-          <p className="font-mono text-xl text-accent sm:text-2xl">{channelName}</p>
-        </div>
       </div>
     </div>
   );
@@ -261,7 +247,7 @@ function NowNext({ current, upcoming, now }: { current: LcSlot; upcoming: LcSlot
 
 function ChannelTabs({ active }: { active: ChannelId }) {
   return (
-    <div className="flex flex-wrap gap-3" role="tablist" aria-label="Canales">
+    <div className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-2 pt-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0" role="tablist" aria-label="Canales">
       {channels.map((c) => {
         const selected = c.id === active;
         return (
@@ -272,11 +258,11 @@ function ChannelTabs({ active }: { active: ChannelId }) {
             aria-selected={selected}
             scroll={false}
             title={`CH ${channelNumber(c.id)} · ${c.name}`}
-            className={`chunky grid h-14 place-items-center rounded-lg border-b-[6px] bg-white px-3 transition-transform sm:h-16 sm:px-4 ${selected ? "-translate-y-1 ring-4 ring-accent" : "opacity-75 hover:-translate-y-0.5 hover:opacity-100"}`}
+            className={`chunky grid h-14 shrink-0 snap-start place-items-center rounded-lg border-b-[6px] bg-white px-3 transition-transform sm:h-16 sm:px-4 ${selected ? "-translate-y-1 ring-4 ring-accent" : "opacity-75 hover:-translate-y-0.5 hover:opacity-100"}`}
             style={{ borderBottomColor: c.color === "#f2f2f2" ? "#111" : c.color }}
           >
             {/* Solo el logo del canal (el nombre va en el texto alternativo). */}
-            <ChannelLogo id={c.id} className={`w-auto max-w-[8.5rem] ${c.id === "disney" || c.id === "warner" || c.id === "jetix" ? "h-10 sm:h-12" : "h-6 sm:h-8"}`} />
+            <ChannelLogo id={c.id} height={24} />
           </Link>
         );
       })}
@@ -297,7 +283,7 @@ function ChannelBanner({ channelId }: { channelId: ChannelId }) {
       <span className="osd font-mono text-5xl leading-none">CH {channelNumber(channelId)}</span>
       <div className="min-w-0 flex-1">
         <p className="inline-block rounded-md border-2 border-black bg-white px-2 py-1">
-          <ChannelLogo id={channelId} className={`w-auto ${channelId === "disney" || channelId === "warner" || channelId === "jetix" ? "h-12" : "h-7"}`} />
+          <ChannelLogo id={channelId} height={30} />
         </p>
         <p className="font-mono text-xl leading-tight opacity-85">
           {c.tagline} · {c.years}

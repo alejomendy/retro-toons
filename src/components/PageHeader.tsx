@@ -6,6 +6,7 @@ export default function PageHeader({
   kickerColor = "#ff3ea5",
   kickerInk = "#ffffff",
   aside,
+  compact = false,
 }: {
   kicker: string;
   title: string;
@@ -14,6 +15,8 @@ export default function PageHeader({
   kickerInk?: string;
   /** Contenido a la derecha (ej. un dato o un botón). */
   aside?: React.ReactNode;
+  /** En el celular, sin bajada (para que el contenido principal quede arriba). */
+  compact?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
@@ -22,7 +25,7 @@ export default function PageHeader({
           {kicker}
         </span>
         <h1 className="font-display text-4xl leading-none text-accent [text-shadow:4px_4px_0_#000] sm:text-5xl">{title}</h1>
-        {children && <p className="max-w-2xl text-lg text-white/75">{children}</p>}
+        {children && <p className={`max-w-2xl text-lg text-white/75 ${compact ? "hidden sm:block" : ""}`}>{children}</p>}
       </div>
       {aside}
     </div>
