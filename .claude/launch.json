@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 3000
+    },
+    {
+      "name": "retro-toons-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["-e", "process.env.NEXT_DIST_DIR='.next-preview';require('child_process').spawn(process.execPath,[require.resolve('next/dist/bin/next'),'dev','-p','3002'],{stdio:'inherit'}).on('exit',c=>process.exit(c??0))"],
+      "port": 3002
     }
   ]
 }

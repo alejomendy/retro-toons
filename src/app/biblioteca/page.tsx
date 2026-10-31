@@ -5,6 +5,7 @@ import ContinueWatching from "@/components/series/ContinueWatching";
 import PageHeader, { SectionTitle } from "@/components/PageHeader";
 import BibliotecaClient from "./BibliotecaClient";
 import ExternalSeries, { ExternalSeriesSkeleton } from "./ExternalSeries";
+import AddonCollections, { AddonCollectionsSkeleton } from "./AddonCollections";
 import SurpriseButton from "@/components/series/SurpriseButton";
 import AchievementsSection from "@/components/series/AchievementsSection";
 import NetworkCatalog from "@/components/catalog/NetworkCatalog";
@@ -32,6 +33,9 @@ export default async function BibliotecaPage() {
       </section>
       <Suspense fallback={<ExternalSeriesSkeleton />}>
         <ExternalSeries />
+      </Suspense>
+      <Suspense fallback={<AddonCollectionsSkeleton />}>
+        <AddonCollections />
       </Suspense>
       <AchievementsSection />
     </div>

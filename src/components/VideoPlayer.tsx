@@ -588,16 +588,10 @@ export default function VideoPlayer({
                     <div className="absolute inset-0 z-10 bg-black">
                         <div className="static-noise absolute inset-0 opacity-50" aria-hidden />
                         <div className="absolute inset-0 grid place-items-center p-4 text-center">
-                            {loading ? (
-                                <p role="status" className="flex items-center gap-2 rounded-lg bg-black/75 px-5 py-3 font-mono text-xl text-white sm:text-2xl">
-                                    <Loader2 className="size-5 animate-spin" /> {slow ? "Despertando la antena..." : "Sintonizando..."}
-                                </p>
-                            ) : (
-                                <div role="alert" className="max-w-md rounded-lg bg-black/75 px-5 py-3">
-                                    <p className="font-display text-xl text-white sm:text-2xl">Sin señal</p>
-                                    <p className="font-mono text-lg text-white/70">{error || playbackError}</p>
-                                </div>
-                            )}
+                            {/* En vivo nunca "Sin señal": si este episodio no anda, la tele ya está buscando otro. */}
+                            <p role="status" className="flex items-center gap-2 rounded-lg bg-black/75 px-5 py-3 font-mono text-xl text-white sm:text-2xl">
+                                <Loader2 className="size-5 animate-spin" /> {loading ? (slow ? "Despertando la antena..." : "Sintonizando...") : "Buscando señal..."}
+                            </p>
                         </div>
                     </div>
                 )}

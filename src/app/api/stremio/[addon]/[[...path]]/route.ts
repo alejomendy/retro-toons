@@ -14,9 +14,8 @@ async function proxy(request: NextRequest, context: RouteContext) {
   const addon = getStremioAddon(addonId);
   if (!addon) return NextResponse.json({ error: "Addon desconocido" }, { status: 404 });
 
-  const suffix = path.length
-    ? `/${path.map((segment) => encodeURIComponent(segment).replace(/%3D/gi, "=")).join("/")}`
-    : "/manifest.json";
+  // El "=" de los extras de Stremio ("search=…", "skip=20") tiene que llegar sin codificar.
+  const suffix = path.length ? `/${path.map((segment) => encodeURIComponent(segment).replace(/%3D/gi, "=")).join("/")}` : "/manifest.json";
   const upstreamUrl = new URL(`${addon.baseUrl}${suffix}`);
   request.nextUrl.searchParams.forEach((value, key) => upstreamUrl.searchParams.append(key, value));
 
