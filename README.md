@@ -3,7 +3,9 @@
 La tele de la tarde de los 90s y 2000s, en **español latino**: seis canales con programación semanal en vivo y una biblioteca para ver cualquier serie cuando quieras.
 
 - **Programación** (`/programacion`): Cartoon Network, Nickelodeon, Jetix, Disney, Warner Channel y FOX, cada uno con su grilla de lunes a viernes, especial del viernes y grillas propias de sábado y domingo. La tele pasa lo que está al aire desde el minuto que corresponde, con placa del canal, zócalo «Estás viendo», tanda con cuenta regresiva, control remoto (↑/↓, 1–6, deslizar en el celular) y modo cine estilo YouTube.
-- **Biblioteca** (`/biblioteca`): series de LACartoons con búsqueda, filtros por cadena, favoritos y «Continuar viendo»; además, un explorador paginado de Cartoon Network y Disney Channel alimentado por TMDB, con temporadas, episodios, avances y búsqueda de videos dentro de canales de YouTube configurados.
+- **Biblioteca** (`/biblioteca`): series de LACartoons con búsqueda, filtros por cadena, favoritos y «Continuar viendo»; después, las colecciones armadas con los addons y el explorador de Cartoon Network y Disney Channel (TMDB). Todo arranca en **Para ver ahora**: lo que se ve acá en español latino va primero y el resto queda como ficha. Cada episodio muestra su imagen de TMDB (también en series de cortos, donde TMDB cuenta cada segmento).
+- **Addons** (`/addons`): los catálogos de los addons de Stremio y sus colecciones (`/colecciones/:slug`). Ver [Addons de Stremio](#addons-de-stremio).
+- **En el celular**, las secciones están en una barra de pestañas fija abajo y la tele de la programación queda arriba de todo.
 
 ```bash
 npm install

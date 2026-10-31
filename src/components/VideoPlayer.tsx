@@ -615,13 +615,14 @@ export default function VideoPlayer({
                 <div ref={containerRef} data-vjs-player />
 
                 {(loading || error) && (
-                    <div className="absolute inset-0 z-10 grid place-items-center bg-black p-4 text-center">
+                    // Con póster, se ve el fondo de la serie (difuminado) mientras se sintoniza; sin póster, negro.
+                    <div className={`absolute inset-0 z-10 grid place-items-center p-4 text-center ${poster && loading ? "bg-black/60 backdrop-blur-sm" : "bg-black"}`}>
                         {loading ? (
                             <div role="status" className="flex flex-col items-center gap-1">
                                 <p className="flex items-center gap-2 font-mono text-xl text-white/80">
                                     <Loader2 className="size-5 animate-spin" /> Sintonizando el episodio...
                                 </p>
-                                {slow && <p className="max-w-sm text-sm text-white/65">El servidor de videos se estaba durmiendo: la primera vez puede tardar hasta medio minuto.</p>}
+                                {slow && <p className="max-w-sm text-sm text-white/65">El servidor de videos se estaba durmiendo: la primera vez puede tardar hasta un minuto. Después, el episodio queda listo al instante.</p>}
                             </div>
                         ) : (
                             <div role="alert" className="flex max-w-md flex-col items-center gap-3 text-white">
@@ -683,7 +684,7 @@ export default function VideoPlayer({
                                 key={`${stream.url}-${index}`}
                                 value={stream.url}
                             >
-                                {stream.label}
+                                {friendlyLabel(stream.label)}
                                 {failedUrls.includes(stream.url)
                                     ? " (falló)"
                                     : stream.notWebReady
@@ -696,6 +697,11 @@ export default function VideoPlayer({
             )}
         </section>
     );
+}
+
+/** Nombre de la fuente para mostrar: sin el detalle técnico del proxy del addon. */
+function friendlyLabel(label: string): string {
+    return label.replace(/^LACartoons (proxy)s*·s*/i, "").replace(/^LACartoonss*·s*/i, "") || label;
 }
 
 function RetryButton({ onClick }: { onClick: () => void }) {

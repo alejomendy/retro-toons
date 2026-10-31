@@ -15,6 +15,7 @@ export default function AddonTitleCard({ title }: { title: AddonTitle }) {
       name={title.name}
       poster={title.poster}
       href={lc ? seriesHref(lc.id) : addonTitleHref(title)}
+      muted={!lc}
       badges={
         <div className="flex flex-wrap gap-1">
           {lc && <span className="rounded border-2 border-black bg-accent px-1.5 font-mono text-sm leading-tight text-black">▶ Para ver</span>}

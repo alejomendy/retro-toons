@@ -10,6 +10,7 @@ import AddonTitleCard from "@/components/series/AddonTitleCard";
 import StateMessage from "@/components/series/StateMessage";
 
 type Params = Promise<{ slug: string }>;
+type Search = Promise<{ ver?: string }>;
 
 export const maxDuration = 60;
 
@@ -18,11 +19,15 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: `${collection?.title ?? "Colección"} — RetroToons` };
 }
 
-export default async function ColeccionPage({ params }: { params: Params }) {
+export default async function ColeccionPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   const collection = getAddonCollection((await params).slug);
   if (!collection) notFound();
+  const onlyPlayable = (await searchParams).ver === "disponibles";
   const titles = await getCollectionTitles(collection.slug).catch(() => null);
-  const playable = titles?.filter((t) => t.lacartoons).length ?? 0;
+  const playable = titles?.filter((t) => t.lacartoons) ?? [];
+  // Lo que se puede ver acá va primero; el resto queda como ficha.
+  const shown = onlyPlayable ? playable : [...playable, ...(titles ?? []).filter((t) => !t.lacartoons)];
+  const href = `/colecciones/${collection.slug}`;
 
   return (
     <div className="space-y-8">
@@ -38,11 +43,23 @@ export default async function ColeccionPage({ params }: { params: Params }) {
         </StateMessage>
       ) : (
         <>
-          <p className="font-mono text-xl text-white/65">
-            {titles.length} títulos{playable > 0 && ` · ${playable} para ver en RetroToons`}
-          </p>
+          {playable.length > 0 && (
+            <div className="inline-flex rounded-lg border-2 border-black bg-black/40 p-1 text-sm font-bold" role="group" aria-label="Qué mostrar">
+              <Link href={href} aria-current={!onlyPlayable ? "true" : undefined} className={`rounded-md px-3 py-1.5 ${!onlyPlayable ? "bg-accent text-black" : "text-white/70 hover:text-white"}`}>
+                Todo ({titles.length})
+              </Link>
+              <Link
+                href={`${href}?ver=disponibles`}
+                aria-current={onlyPlayable ? "true" : undefined}
+                className={`rounded-md px-3 py-1.5 ${onlyPlayable ? "bg-accent text-black" : "text-white/70 hover:text-white"}`}
+              >
+                Para ver ahora ({playable.length})
+              </Link>
+            </div>
+          )}
+          {playable.length === 0 && <p className="font-mono text-xl text-white/65">{titles.length} títulos · todavía ninguno para ver en RetroToons</p>}
           <SeriesGrid>
-            {titles.map((t) => (
+            {shown.map((t) => (
               <li key={`${t.type}:${t.id}`}>
                 <AddonTitleCard title={t} />
               </li>

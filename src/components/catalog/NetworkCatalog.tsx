@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { SectionTitle } from "@/components/PageHeader";
+import SeriesCard, { SeriesCardSkeleton, SeriesGrid } from "@/components/series/SeriesCard";
+import FavoriteButton from "@/components/series/FavoriteButton";
 import { ArrowLeft, ChevronDown, Clapperboard, ExternalLink, Loader2, Play, Search, Tv } from "lucide-react";
 
 type NetworkKey = "cartoon-network" | "disney-channel";
@@ -53,6 +55,10 @@ const NETWORKS: { id: NetworkKey; label: string; accent: string; description: st
   { id: "disney-channel", label: "Disney Channel", accent: "#2684ff", description: "Animación y series juveniles de Disney Channel." },
 ];
 
+/** Tarjetas que se ven al principio y cuántas más suma cada «Ver más». */
+const PREVIEW = 12;
+const PAGE_STEP = 24;
+
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, { signal });
   const body = await response.json().catch(() => null) as (T & { error?: string }) | null;
@@ -72,6 +78,8 @@ export default function NetworkCatalog() {
   const [totalResults, setTotalResults] = useState(0);
   const [query, setQuery] = useState("");
   const [onlyAvailable, setOnlyAvailable] = useState(true);
+  // La sección está en el medio de la biblioteca: arranca corta y se abre a pedido.
+  const [shown, setShown] = useState(PREVIEW);
   const [totalIndexed, setTotalIndexed] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -128,6 +136,7 @@ export default function NetworkCatalog() {
     setVideo(null);
     setItems([]);
     setPage(0);
+    setShown(PREVIEW);
     void loadPage(1, network);
   }, [network, loadPage]);
 
@@ -238,30 +247,56 @@ export default function NetworkCatalog() {
             </div>
           </div>
           {error && <p role="alert" className="rounded-lg border border-amber-300/30 bg-amber-950/30 p-3 text-sm text-amber-100">{error}</p>}
-          {loading && items.length === 0 ? <div className="flex items-center gap-2 py-10 text-white/70"><Loader2 className="size-5 animate-spin" /> Cargando catálogo…</div> : null}
+          {loading && items.length === 0 ? (
+            <SeriesGrid>
+              {Array.from({ length: 8 }, (_, i) => (
+                <li key={i}>
+                  <SeriesCardSkeleton />
+                </li>
+              ))}
+            </SeriesGrid>
+          ) : null}
           {filteredItems.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-              {filteredItems.map((item) => {
-                const cardClass = `group overflow-hidden rounded-xl border-2 border-black bg-panel text-left shadow-[4px_4px_0_#000] transition-transform hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent ${item.watch ? "" : "opacity-80 hover:opacity-100"}`;
-                const content = (
-                  <>
-                    <div className="relative aspect-[2/3] overflow-hidden bg-black/30">
-                      {item.poster ? <img src={item.poster.replace("/w500/", "/w342/")} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center p-3 text-center text-sm text-white/40">Sin póster disponible</div>}
-                      <span className="absolute bottom-2 left-2 rounded bg-black/80 px-2 py-1 text-xs font-bold text-white">{year(item.firstAirDate)}</span>
-                      {item.watch ? <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded border-2 border-black bg-accent px-1.5 py-0.5 text-[11px] font-black uppercase text-black shadow-[2px_2px_0_#000]"><Play className="size-3 fill-current" aria-hidden /> En RetroToons</span> : <span className="absolute right-2 top-2 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-bold text-white/70">Solo ficha</span>}
-                    </div>
-                    <span className="block line-clamp-2 min-h-12 p-2.5 text-sm font-bold group-hover:text-accent">{item.name}</span>
-                  </>
-                );
-                return item.watch ? (
-                  <Link key={item.id} href={item.watch.href} className={cardClass} aria-label={`Ver ${item.name} en RetroToons`}>{content}</Link>
-                ) : (
-                  <button key={item.id} type="button" onClick={() => void openShow(item)} className={cardClass}>{content}</button>
+            <SeriesGrid>
+              {(query.trim() ? filteredItems : filteredItems.slice(0, shown)).map((item) => {
+                // Misma tarjeta que el resto de la biblioteca: las que se ven acá llevan a la serie; las otras abren su ficha.
+                const seriesId = item.watch?.href.match(/^\/biblioteca\/([^/?#]+)$/)?.[1];
+                const poster = item.poster?.replace("/w500/", "/w342/") ?? null;
+                return (
+                  <li key={item.id}>
+                    <SeriesCard
+                      id={seriesId ?? String(item.id)}
+                      name={item.name}
+                      poster={poster}
+                      href={item.watch?.href}
+                      onSelect={item.watch ? undefined : () => void openShow(item)}
+                      muted={!item.watch}
+                      badges={
+                        <div className="flex flex-wrap gap-1">
+                          {item.watch ? (
+                            <span className="rounded border-2 border-black bg-accent px-1.5 font-mono text-sm leading-tight text-black">▶ Para ver</span>
+                          ) : (
+                            <span className="rounded border-2 border-black bg-black/40 px-1.5 font-mono text-sm leading-tight text-white/70">Solo ficha</span>
+                          )}
+                          {item.firstAirDate && <span className="rounded border-2 border-black bg-white px-1.5 font-mono text-sm leading-tight text-black">{year(item.firstAirDate)}</span>}
+                        </div>
+                      }
+                    >
+                      {seriesId && <FavoriteButton id={decodeURIComponent(seriesId)} name={item.watch!.title} poster={poster} compact />}
+                    </SeriesCard>
+                  </li>
                 );
               })}
-            </div>
+            </SeriesGrid>
           ) : !loading ? <p className="rounded-xl bg-panel p-6 text-center text-white/65">{query.trim() ? "No hay títulos que coincidan con esa búsqueda." : "Todavía no hay series de esta cadena para ver en RetroToons."}{onlyAvailable && <button type="button" onClick={() => setOnlyAvailable(false)} className="ml-1 font-bold text-accent hover:underline">Ver todo el catálogo</button>}</p> : null}
-          {page < totalPages && !query.trim() && <div className="flex justify-center"><button type="button" onClick={() => void loadPage(page + 1)} disabled={loadingMore} className="chunky inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-3 font-bold text-black disabled:opacity-60">{loadingMore ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-4" />} Cargar más títulos</button></div>}
+          {!query.trim() && filteredItems.length > shown && (
+            <div className="flex justify-center">
+              <button type="button" onClick={() => setShown((n) => n + PAGE_STEP)} className="chunky inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 font-bold text-black transition-transform hover:-translate-y-0.5">
+                <ChevronDown className="size-4" /> Ver más ({filteredItems.length - shown})
+              </button>
+            </div>
+          )}
+          {page < totalPages && !query.trim() && filteredItems.length <= shown && <div className="flex justify-center"><button type="button" onClick={() => void loadPage(page + 1)} disabled={loadingMore} className="chunky inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-3 font-bold text-black disabled:opacity-60">{loadingMore ? <Loader2 className="size-4 animate-spin" /> : <ChevronDown className="size-4" />} Cargar más títulos</button></div>}
         </>
       ) : (
         <div className="space-y-5 rounded-xl border-2 border-black bg-panel p-4 shadow-[5px_5px_0_#000]">

@@ -105,7 +105,7 @@ export default async function AddonTitlePage({ params }: { params: Params }) {
                   <span className="font-mono text-xl text-accent">{String(i + 1).padStart(2, "0")}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block font-bold leading-tight">{e.title}</span>
-                    <span className="block text-xs text-white/60">{[e.label, e.watch ? "Ver en LACartoons" : "No está en LACartoons"].filter(Boolean).join(" · ")}</span>
+                    <span className="block text-xs text-white/60">{[e.label, e.watch ? "Para ver en RetroToons" : "Todavía no está para ver"].filter(Boolean).join(" · ")}</span>
                   </span>
                   {e.watch && <Play className="size-5 shrink-0 fill-current text-accent" aria-hidden />}
                 </>
@@ -127,7 +127,7 @@ export default async function AddonTitlePage({ params }: { params: Params }) {
         </section>
       )}
 
-      <p className="text-xs text-white/65">Ficha: addon {addon.name} (Stremio). Videos: LACartoons.</p>
+      <p className="text-xs text-white/65">Ficha: addon {addon.name} (Stremio). Los episodios se ven en RetroToons, en español latino.</p>
     </div>
   );
 }
