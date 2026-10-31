@@ -254,7 +254,7 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
     // y se renueva la semana siguiente. Los episodios sí avanzan todos los días.
     const offset = (week + b) % pool.length;
     for (let t = toMinutes(block.start), i = 0; t < end; t += length, i++) {
-      const key = pool[(offset + i) % pool.length];
+      const key = pool[(offset + (block.double ? Math.floor(i / 2) : i)) % pool.length];
       const nth = airedToday.get(key) ?? 0;
       airedToday.set(key, nth + 1);
       // Las repeticiones avanzan día a día por la lista real de episodios.
@@ -414,7 +414,7 @@ const cachedSchedule = unstable_cache(
     const [y, m, d] = fecha.split("-").map(Number);
     return getLcSchedule(channelId, new Date(y, m - 1, d));
   },
-  ["lacartoons-schedule-v3", String(playableList.checkedAt ?? "sin-lista")],
+  ["lacartoons-schedule-v4", String(playableList.checkedAt ?? "sin-lista")],
   { revalidate: 7 * 24 * 60 * 60 },
 );
 

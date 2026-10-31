@@ -32,6 +32,8 @@ export interface ScheduleBlock {
   exclusive?: boolean;
   /** Duración de cada espacio en minutos (por defecto 30). */
   slotMinutes?: number;
+  /** "Doble Carga" (Fox Kids): cada serie pasa dos episodios seguidos. */
+  double?: boolean;
 }
 
 export interface Show {

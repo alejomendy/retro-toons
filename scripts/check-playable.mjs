@@ -79,7 +79,11 @@ for (const w of wanted) {
 const series = { ...previous.series };
 let i = 0;
 // ONLY_FALSE=1: solo vuelve a revisar las que figuran sin video (o sin dato).
-const toCheck = [...ids].sort().filter(([id]) => process.env.ONLY_FALSE !== "1" || series[id]?.playable !== true);
+// ONLY_NEW=1: solo las que todavía no tienen dato (ej. recién sumadas a la programación).
+const toCheck = [...ids]
+  .sort()
+  .filter(([id]) => process.env.ONLY_FALSE !== "1" || series[id]?.playable !== true)
+  .filter(([id]) => process.env.ONLY_NEW !== "1" || series[id] === undefined);
 console.log(`Revisando ${toCheck.length} series.`);
 for (const [id, name] of toCheck) {
   i++;
