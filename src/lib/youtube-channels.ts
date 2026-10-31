@@ -83,6 +83,13 @@ function seasonEpisode(title: string): [number, number] | null {
 export interface EpisodeQuery {
   season?: number;
   numberInSeason?: number;
+  /** Número absoluto del episodio en la serie ("capítulo 40" en canales que no dan temporada). */
+  number?: number;
+  /**
+   * Textos que el título del video tiene que tener (ej. "Ojos de Gato", "Español Latino"): para canales
+   * que suben varias series o idiomas. Con esto también se acepta el número absoluto del episodio.
+   */
+  titleMustInclude?: string[];
   minutes: number;
   /** Nombres del episodio (latino y original) para comparar con el título del video. */
   names: string[];
@@ -91,6 +98,13 @@ export interface EpisodeQuery {
    * series cuyo canal numera distinto que TMDB (ej. Power Rangers por temporada de cada saga).
    */
   matchByNumber: boolean;
+}
+
+/** "capítulo 40", "Capitulo 7 -", "Episodio 12", "| 70 - …": número absoluto, solo si el título no tiene temporada. */
+function absoluteEpisode(title: string): number | null {
+  if (seasonEpisode(title)) return null;
+  const m = normalize(title).match(/\b(?:capitulo|cap|episodio|ep)\s*(\d+)\b/) ?? title.match(/\|\s*(\d{1,3})\s*-\s/);
+  return m ? Number(m[1]) : null;
 }
 
 /** Compilados, maratones y recortes: nunca son un episodio. */
@@ -135,8 +149,12 @@ export async function channelMatcher(channelIds: string[]): Promise<(ep: Episode
 
 function matchInChannels(channels: ChannelVideo[][], ep: EpisodeQuery): VideoSource | undefined {
   const names = ep.names.filter((n) => normalize(n).length >= 4);
+  const required = (ep.titleMustInclude ?? []).map(normalize);
   const fits = (v: ChannelVideo) =>
-    v.minutes >= ep.minutes * 0.6 && v.minutes <= Math.max(ep.minutes * 2.5, 30) && !COMPILATION.test(normalize(v.title));
+    v.minutes >= ep.minutes * 0.6 &&
+    v.minutes <= Math.max(ep.minutes * 2.5, 30) &&
+    !COMPILATION.test(normalize(v.title)) &&
+    required.every((t) => normalize(v.title).includes(t));
 
   // Un nombre de una sola palabra ("Cambios", "Magia") aparece en cualquier título:
   // en ese caso el video tiene que empezar con ese nombre.
@@ -155,7 +173,10 @@ function matchInChannels(channels: ChannelVideo[][], ep: EpisodeQuery): VideoSou
             return se?.[0] === ep.season && se?.[1] === ep.numberInSeason;
           })
         : undefined;
-    const hit = byName ?? byNumber;
+    // Número absoluto: solo con filtro de título (si no, en un canal de varias series sería cualquier "capítulo 5").
+    const byAbsolute =
+      ep.matchByNumber && ep.number && required.length > 0 ? videos.find((v) => absoluteEpisode(v.title) === ep.number) : undefined;
+    const hit = byName ?? byNumber ?? byAbsolute;
     if (hit) return { type: "youtube", id: hit.id };
   }
   return undefined;

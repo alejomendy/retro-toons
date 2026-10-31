@@ -239,6 +239,8 @@ async function sourceFinder(show: Show, localTitle?: string | null, seasonCounts
       minutes: Math.min(episode.minutes, show.episodeMinutes),
       names,
       matchByNumber: show.matchByNumber ?? true,
+      number: episode.number,
+      titleMustInclude: show.youtubeTitleFilter,
     });
     if (video) return video;
     const p = pluto?.(names, {

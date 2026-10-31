@@ -102,6 +102,12 @@ export const shows: Show[] = [
   { id: "capitan-tsubasa", title: "Capitán Tsubasa", originalTitle: "Captain Tsubasa", tmdbId: 77240, channels: [], year: 2018, genre: "Anime / Deportes", description: "Tsubasa Ozora y su sueño de ser campeón del mundo, en la versión nueva de Supercampeones.", seasons: 2, episodeCount: 91, episodeMinutes: 24, palette: ["#1d4ed8", "#f8fafc"] },
   { id: "willy-fog", title: "La Vuelta al Mundo de Willy Fog", originalTitle: "Around The World With Willy Fog", tmdbId: 5150, channels: [], year: 1983, genre: "Aventura", description: "Un caballero león apuesta que da la vuelta al mundo en 80 días, con Rigodón y Romy.", seasons: 1, episodeCount: 26, episodeMinutes: 26, palette: ["#7f1d1d", "#fef3c7"] },
   { id: "david-el-gnomo", title: "David el Gnomo", originalTitle: "David the Gnome", tmdbId: 2849, channels: [], year: 1985, genre: "Aventura / Naturaleza", description: "Un gnomo médico de 399 años cuida a los animales del bosque, montado en su zorro Swift.", seasons: 1, episodeCount: 26, episodeMinutes: 24, palette: ["#166534", "#fecaca"] },
+
+  // ───────────── YouTube oficial: TMS Anime Latino ─────────────
+  // El canal de TMS sube varias series e idiomas: el filtro de título deja solo la serie en español latino
+  // y permite cruzar por número absoluto ("capítulo 40").
+  { id: "ojos-de-gato", title: "Ojos de Gato", originalTitle: "Cat's Eye", tmdbId: 34114, youtubeChannels: ["UCQNS2WJVOY7fkv2hDJtaw2Q"], youtubeTitleFilter: ["Ojos de Gato", "Español Latino"], pluto: false, channels: [], year: 1983, genre: "Anime / Acción", description: "De día atienden un café; de noche, tres hermanas roban obras de arte para encontrar a su padre.", seasons: 2, episodeCount: 73, episodeMinutes: 24, palette: ["#7c2d12", "#fde68a"] },
+  { id: "guerreras-magicas", title: "Las Guerreras Mágicas", originalTitle: "Magic Knight Rayearth", tmdbId: 34158, youtubeChannels: ["UCQNS2WJVOY7fkv2hDJtaw2Q"], youtubeTitleFilter: ["Guerreras Magicas", "Español Latino"], pluto: false, channels: [], year: 1994, genre: "Anime / Fantasía", description: "Lucy, Marina y Anaís son llevadas a Céfiro para salvar a la princesa Esmeralda.", seasons: 2, episodeCount: 49, episodeMinutes: 25, palette: ["#be123c", "#bfdbfe"] },
 ];
 
 export const showById = Object.fromEntries(shows.map((s) => [s.id, s])) as Record<string, Show>;

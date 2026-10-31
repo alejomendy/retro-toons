@@ -49,6 +49,8 @@ export interface Show {
   fanWiki?: FanWiki;
   /** Canales OFICIALES de YouTube que suben episodios completos (ver lib/youtube-channels.ts). */
   youtubeChannels?: string[];
+  /** Textos que tienen que estar en el título de los videos de esos canales (canales de varias series o idiomas). */
+  youtubeTitleFilter?: string[];
   /** false si el canal numera los episodios distinto que TMDB: solo se cruza por nombre. */
   matchByNumber?: boolean;
   /** false si lo que hay en Pluto TV con ese nombre es otra versión (ej. Tortugas Ninja 2012 ≠ 2003). */
