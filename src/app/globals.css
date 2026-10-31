@@ -140,8 +140,81 @@ body {
 }
 .bump-pop { animation: bump-pop 0.45s ease-out both; }
 
+/* Identificaciones de cada canal (diseño propio inspirado en la época) */
+@keyframes checker-slide { to { background-position: 50% 100%; } }
+.ident-bg-cartoon-network { animation: checker-slide 6s linear infinite; }
+@keyframes wm-cn {
+  0% { transform: scale(3) rotate(-8deg); opacity: 0; }
+  55% { transform: scale(0.95) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+.wm-cn { animation: wm-cn 0.7s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+
+@keyframes wm-nick {
+  0% { transform: scale(0) rotate(-20deg); border-radius: 50%; }
+  50% { transform: scale(1.15) rotate(6deg); }
+  70% { border-radius: 60% 40% 55% 45% / 45% 60% 40% 55%; }
+  100% { transform: scale(1) rotate(-2deg); }
+}
+@keyframes nick-wobble {
+  0%, 100% { border-radius: 46% 54% 41% 59% / 58% 44% 56% 42%; }
+  50% { border-radius: 58% 42% 60% 40% / 42% 58% 44% 56%; }
+}
+.wm-nick { animation: wm-nick 0.8s cubic-bezier(0.3, 1.5, 0.5, 1) both, nick-wobble 2.4s ease-in-out 0.8s infinite; }
+
+@keyframes wm-jetix {
+  0% { transform: translateX(-120%) skewX(-30deg); opacity: 0; }
+  60% { transform: translateX(6%) skewX(-12deg); opacity: 1; }
+  100% { transform: translateX(0) skewX(-12deg); }
+}
+@keyframes jetix-stripes { to { background-position: 79px 0; } }
+.wm-jetix { animation: wm-jetix 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.ident-bg-jetix { animation: jetix-stripes 0.8s linear infinite; }
+
+@keyframes wm-disney {
+  0% { opacity: 0; filter: blur(8px); transform: translateY(12px); }
+  100% { opacity: 1; filter: blur(0); transform: none; }
+}
+@keyframes disney-arc {
+  0% { clip-path: inset(0 100% 0 0); }
+  100% { clip-path: inset(0 0 0 0); }
+}
+.wm-disney { animation: wm-disney 1.1s ease-out both; }
+.wm-disney-arc { animation: disney-arc 1.2s ease-in-out 0.2s both; }
+@keyframes stars-drift { to { background-position: 14px -10px, -12px 8px, 8px 12px, -10px -8px, 0 0; } }
+.ident-bg-disney { animation: stars-drift 4s ease-in-out infinite alternate; }
+
+@keyframes wm-warner {
+  0% { transform: scale(0.1) rotate(-200deg); opacity: 0; }
+  70% { transform: scale(1.08) rotate(8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes rings-out { from { background-size: 100% 100%; } to { background-size: 140% 140%; } }
+.wm-warner { animation: wm-warner 0.9s cubic-bezier(0.2, 0.8, 0.3, 1) both; }
+.ident-bg-warner { animation: rings-out 3s ease-in-out infinite alternate; }
+
+@keyframes wm-fox {
+  0% { transform: translateY(60%) scaleY(0.2); opacity: 0; }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes fox-sweep {
+  0%, 100% { transform: rotate(-25deg); }
+  50% { transform: rotate(25deg); }
+}
+.wm-fox { animation: wm-fox 0.7s cubic-bezier(0.2, 0.9, 0.3, 1) both; }
+.fox-beam { animation: fox-sweep 3.2s ease-in-out infinite; }
+.fox-beam-2 { animation-delay: -1.6s; }
+
+@keyframes slogan-in {
+  0%, 40% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: none; }
+}
+.ident-slogan { animation: slogan-in 1.2s ease-out both; }
+
 @media (prefers-reduced-motion: reduce) {
   .ident-in, .ident-progress, .bump-pop { animation: none; }
+  .wm-cn, .wm-nick, .wm-jetix, .wm-disney, .wm-disney-arc, .wm-warner, .wm-fox, .fox-beam, .ident-slogan,
+  .ident-bg-cartoon-network, .ident-bg-jetix, .ident-bg-disney, .ident-bg-warner { animation: none; }
   .static-noise, .blink, .marquee, .osd-flash { animation: none; }
   .lower-third { animation: none; opacity: 0; }
   .zap { animation: none; opacity: 0; }

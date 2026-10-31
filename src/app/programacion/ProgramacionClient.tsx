@@ -17,6 +17,7 @@ import VideoPlayer from "@/components/LazyVideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
 import { episodeLabel, lcErrorMessages, seriesHref, watchHref, type LcSlot } from "@/lib/lacartoons-types";
 import type { ChannelId } from "@/lib/types";
+import { brandBackground, CHANNEL_BRANDS, ChannelWordmark } from "@/components/ChannelBrand";
 
 type Grid = { key: string; slots: LcSlot[] } | { key: string; error: string };
 
@@ -284,7 +285,7 @@ function ChannelTabs({ active }: { active: ChannelId }) {
 
 function tvChannel(id: ChannelId) {
   const c = channelById[id];
-  return { number: channelNumber(id), name: c.name, color: c.color, ink: c.ink };
+  return { id, number: channelNumber(id), name: c.name, color: c.color, ink: c.ink };
 }
 
 /** Franja con la identidad del canal sintonizado: número, nombre, eslogan y época. */
@@ -527,15 +528,14 @@ function LiveTv({
  * dice "A continuación" y una barra muestra que la espera tiene tope (IDENT_MAX_MS).
  */
 function ChannelIdent({ channelId, slot, transition }: { channelId: ChannelId; slot: LcSlot; transition: boolean }) {
-  const c = channelById[channelId];
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: c.color, color: c.ink }}>
-      <div className="checker absolute inset-x-0 top-0 h-3 opacity-30" aria-hidden />
-      <div className="checker absolute inset-x-0 bottom-0 h-3 opacity-30" aria-hidden />
-      <div className="absolute inset-0 grid place-items-center p-6 text-center">
-        <div className="ident-in space-y-3">
-          <p className="osd font-mono text-4xl sm:text-6xl">CH {channelNumber(channelId)}</p>
-          <p className="font-display text-3xl leading-none [text-shadow:3px_3px_0_#000] sm:text-6xl">{transition ? "¡Ya sigue!" : c.name}</p>
+    <div className={`ident-bg-${channelId} absolute inset-0 overflow-hidden`} style={brandBackground(channelId)}>
+      <div className="absolute inset-0 grid place-items-center p-4 text-center sm:p-6">
+        <div className="space-y-2 sm:space-y-3">
+          <ChannelWordmark id={channelId} size="md" animate />
+          <p className="font-display text-2xl leading-none sm:text-4xl">
+            <span className="rounded bg-black/70 px-2 text-white">{transition ? "¡Ya sigue!" : `CH ${channelNumber(channelId)}`}</span>
+          </p>
           <SlotCard
             slot={slot}
             label={transition ? "A CONTINUACIÓN" : `AHORA · ${formatTime(slot.start)}`}
@@ -594,68 +594,13 @@ const COMMERCIAL_BREAK_MS = 12_000;
 const BREAK_OUT_MS = 3000;
 const BREAK_BACK_MS = 9500;
 
-/** Estilo de los separadores de cada canal: inspirados en la época, con diseño propio. */
-const BREAK_STYLES: Record<ChannelId, { background: string; size?: string; ink: string; box: string; boxInk: string; out: string; back: string }> = {
-  "cartoon-network": {
-    background: "conic-gradient(#000 25%, #fff 0 50%, #000 0 75%, #fff 0)",
-    size: "25% 50%",
-    ink: "#000",
-    box: "#000",
-    boxInk: "#fff",
-    out: "Ya volvemos",
-    back: "Regresamos con",
-  },
-  nickelodeon: {
-    background:
-      "radial-gradient(circle at 15% 20%, #7fd63b 0 9%, transparent 9.5%), radial-gradient(circle at 85% 75%, #7fd63b 0 12%, transparent 12.5%), radial-gradient(circle at 70% 15%, #7fd63b 0 5%, transparent 5.5%), #ff7a00",
-    ink: "#fff",
-    box: "#7fd63b",
-    boxInk: "#111",
-    out: "¡No cambies de canal!",
-    back: "¡Volvimos con",
-  },
-  jetix: {
-    background: "repeating-linear-gradient(-45deg, #e4002b 0 28px, #8f001b 28px 56px)",
-    ink: "#fff",
-    box: "#000",
-    boxInk: "#fff",
-    out: "¡No te vayas!",
-    back: "Sigue la acción con",
-  },
-  disney: {
-    background:
-      "radial-gradient(circle at 20% 30%, #fff 0 2px, transparent 3px), radial-gradient(circle at 75% 20%, #fff 0 2px, transparent 3px), radial-gradient(circle at 60% 80%, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle at 35% 70%, #ffe680 0 2px, transparent 3px), linear-gradient(160deg, #113ccf, #061a66)",
-    ink: "#fff",
-    box: "#fff",
-    boxInk: "#113ccf",
-    out: "Enseguida volvemos",
-    back: "Volvemos con",
-  },
-  warner: {
-    background: "repeating-radial-gradient(circle at 50% 50%, #0a2d6e 0 26px, #12408f 26px 52px)",
-    ink: "#ffd400",
-    box: "#ffd400",
-    boxInk: "#0a2d6e",
-    out: "¡Ya volvemos, amigos!",
-    back: "Regresamos con",
-  },
-  fox: {
-    background: "conic-gradient(from 200deg at 50% 110%, #f2f2f2 0 10deg, #d4d4d4 10deg 20deg, #f2f2f2 20deg 30deg, #d4d4d4 30deg 40deg, #f2f2f2 40deg)",
-    ink: "#111",
-    box: "#111",
-    boxInk: "#f2f2f2",
-    out: "Ya volvemos",
-    back: "Regresamos con",
-  },
-};
-
 /**
  * Tanda en el medio del episodio, como en la tele: separador de "Ya volvemos", promo de lo que viene
  * (en Cartoon Network, el clásico Ahora / Luego / Después) y separador de vuelta. Dura COMMERCIAL_BREAK_MS.
  */
 function CommercialBreak({ channelId, slot, upcoming, onSkip }: { channelId: ChannelId; slot: LcSlot; upcoming: LcSlot[]; onSkip: () => void }) {
   const c = channelById[channelId];
-  const style = BREAK_STYLES[channelId];
+  const style = CHANNEL_BRANDS[channelId];
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
     const started = Date.now();
@@ -667,7 +612,7 @@ function CommercialBreak({ channelId, slot, upcoming, onSkip }: { channelId: Cha
   const boxClass = "inline-block rounded-lg border-4 border-black px-3 py-1 shadow-[4px_4px_0_#000]";
 
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ background: style.background, backgroundSize: style.size, color: style.ink }} role="status" aria-live="polite">
+    <div className={`ident-bg-${channelId} absolute inset-0 overflow-hidden`} style={brandBackground(channelId)} role="status" aria-live="polite">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center">
         {phase === "out" && (
           <div key="out" className="bump-pop space-y-3">
@@ -759,13 +704,19 @@ function Bumper({ channelId, upcoming }: { channelId: ChannelId; upcoming: LcSlo
   const other = others.length > 0 ? others[Math.floor((tickCount * 1000) / OTHER_CHANNEL_MS) % others.length] : undefined;
 
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ backgroundColor: c.color, color: c.ink }}>
-      <div className="checker absolute inset-x-0 top-0 h-3 opacity-30" aria-hidden />
+    <div className={`ident-bg-${channelId} absolute inset-0 overflow-hidden`} style={brandBackground(channelId)}>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center sm:gap-3 sm:p-6">
-        <p className="font-mono text-lg opacity-80 sm:text-2xl">
-          Estás viendo {c.name} · CH {channelNumber(channelId)}
+        <ChannelWordmark id={channelId} size="md" />
+        <p className="font-mono text-lg sm:text-2xl">
+          <span className="rounded bg-black/70 px-2 text-white">
+            Estás viendo {c.name} · CH {channelNumber(channelId)}
+          </span>
         </p>
-        <p className="font-display text-2xl leading-none [text-shadow:3px_3px_0_#000] sm:text-5xl">{next && left <= 30 ? "¡Ya empieza!" : "¡Ya volvemos!"}</p>
+        <p className="font-display text-2xl leading-none sm:text-5xl">
+          <span className="rounded-lg px-3 py-1" style={{ backgroundColor: CHANNEL_BRANDS[channelId].box, color: CHANNEL_BRANDS[channelId].boxInk }}>
+            {next && left <= 30 ? "¡Ya empieza!" : CHANNEL_BRANDS[channelId].out}
+          </span>
+        </p>
         {next && (
           <SlotCard
             slot={next}

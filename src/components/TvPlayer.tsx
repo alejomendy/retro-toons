@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clapperboard, Minimize2 } from "lucide-react";
-import type { VideoSource } from "@/lib/types";
+import type { ChannelId, VideoSource } from "@/lib/types";
+import { ChannelWordmark } from "./ChannelBrand";
 import { theaterBand, theaterWidth } from "@/lib/use-theater";
 
 interface Props {
@@ -22,7 +23,7 @@ interface Props {
   cinema?: boolean;
   onCinemaChange?: (cinema: boolean) => void;
   /** Canal sintonizado: número que aparece al cambiar y logo fijo en la esquina, como en la tele. */
-  channel?: { number: string; name: string; color: string; ink: string };
+  channel?: { id: ChannelId; number: string; name: string; color: string; ink: string };
 }
 
 export default function TvPlayer({ source, title, subtitle, startAt = 0, badge, badgeColor = "#ef4444", overlay, fallback, cinema: cinemaProp, onCinemaChange, channel }: Props) {
@@ -45,7 +46,7 @@ export default function TvPlayer({ source, title, subtitle, startAt = 0, badge, 
   return (
     <div ref={rootRef} className={cinema ? theaterBand : undefined}>
       <div className={`chunky rounded-[2rem] bg-[#3a2a1a] ${cinema ? `${theaterWidth} p-2 sm:p-4` : "p-3 sm:p-5"}`}>
-        <div className="scanlines relative aspect-video overflow-hidden rounded-[1.5rem] bg-black shadow-[inset_0_0_60px_rgba(0,0,0,0.9)]">
+        <div className="scanlines relative aspect-video overflow-hidden rounded-[1.5rem] bg-black shadow-[inset_0_0_60px_rgba(0,0,0,0.9)] [container-type:inline-size]">
           {overlay ?? <Screen source={source} title={title} subtitle={subtitle} startAt={startAt} fallback={fallback} />}
           {badge && (
             <span
@@ -63,12 +64,9 @@ export default function TvPlayer({ source, title, subtitle, startAt = 0, badge, 
               <span key={channel.number} className="osd osd-flash pointer-events-none absolute right-4 top-3 z-40 font-mono text-4xl sm:text-5xl" aria-hidden>
                 CH {channel.number}
               </span>
-              <span
-                className="pointer-events-none absolute bottom-14 right-3 z-20 rounded border-2 border-black px-2 font-display text-xs opacity-80 sm:text-sm"
-                style={{ backgroundColor: channel.color, color: channel.ink }}
-                aria-hidden
-              >
-                {channel.name}
+              {/* Marca de agua del canal en la esquina, como en la tele. */}
+              <span className="pointer-events-none absolute bottom-14 right-3 z-20 opacity-75" aria-hidden>
+                <ChannelWordmark id={channel.id} size="sm" />
               </span>
             </>
           )}
