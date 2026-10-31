@@ -17,7 +17,7 @@ import VideoPlayer from "@/components/LazyVideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
 import { episodeLabel, lcErrorMessages, seriesHref, watchHref, type LcSlot } from "@/lib/lacartoons-types";
 import type { ChannelId } from "@/lib/types";
-import { brandBackground, CHANNEL_BRANDS, ChannelWordmark } from "@/components/ChannelBrand";
+import { brandBackground, CHANNEL_BRANDS, ChannelLogo, ChannelWordmark } from "@/components/ChannelBrand";
 
 type Grid = { key: string; slots: LcSlot[] } | { key: string; error: string };
 
@@ -271,11 +271,12 @@ function ChannelTabs({ active }: { active: ChannelId }) {
             role="tab"
             aria-selected={selected}
             scroll={false}
-            className={`chunky rounded-lg px-4 py-2 font-display text-sm transition-transform sm:text-base ${selected ? "-translate-y-1 ring-4 ring-accent" : "opacity-80 hover:opacity-100"}`}
-            style={{ backgroundColor: c.color, color: c.ink }}
+            title={`CH ${channelNumber(c.id)} · ${c.name}`}
+            className={`chunky grid h-14 place-items-center rounded-lg border-b-[6px] bg-white px-3 transition-transform sm:h-16 sm:px-4 ${selected ? "-translate-y-1 ring-4 ring-accent" : "opacity-75 hover:-translate-y-0.5 hover:opacity-100"}`}
+            style={{ borderBottomColor: c.color === "#f2f2f2" ? "#111" : c.color }}
           >
-            <span className="mr-1.5 font-mono text-lg opacity-80">{channelNumber(c.id)}</span>
-            {c.name}
+            {/* Solo el logo del canal (el nombre va en el texto alternativo). */}
+            <ChannelLogo id={c.id} className={`w-auto max-w-[8.5rem] ${c.id === "disney" || c.id === "warner" || c.id === "jetix" ? "h-10 sm:h-12" : "h-6 sm:h-8"}`} />
           </Link>
         );
       })}
@@ -295,7 +296,9 @@ function ChannelBanner({ channelId }: { channelId: ChannelId }) {
     <div className="chunky flex flex-wrap items-center gap-x-5 gap-y-2 overflow-hidden rounded-xl px-4 py-3" style={{ backgroundColor: c.color, color: c.ink }}>
       <span className="osd font-mono text-5xl leading-none">CH {channelNumber(channelId)}</span>
       <div className="min-w-0 flex-1">
-        <p className="font-display text-2xl leading-tight">{c.name}</p>
+        <p className="inline-block rounded-md border-2 border-black bg-white px-2 py-1">
+          <ChannelLogo id={channelId} className={`w-auto ${channelId === "disney" || channelId === "warner" || channelId === "jetix" ? "h-12" : "h-7"}`} />
+        </p>
         <p className="font-mono text-xl leading-tight opacity-85">
           {c.tagline} · {c.years}
         </p>

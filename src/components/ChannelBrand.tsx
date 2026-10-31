@@ -1,8 +1,9 @@
+import Image from "next/image";
 import type { ChannelId } from "@/lib/types";
 
 /**
- * Estética de cada canal: colores, fondo, separadores de tanda y una marca tipográfica animada.
- * Inspirada en la época de cada señal pero con diseño propio (no son los logos oficiales).
+ * Estética de cada canal: colores, fondo, separadores de tanda y su logo de la época (de Wikimedia
+ * Commons, donde figuran como dominio público por ser logos de texto; siguen siendo marcas registradas).
  */
 export interface ChannelBrand {
   /** Fondo de pantalla de las placas y tandas (CSS `background`). */
@@ -87,83 +88,64 @@ export function brandBackground(id: ChannelId): React.CSSProperties {
   return { background: b.background, backgroundSize: b.backgroundSize, color: b.ink };
 }
 
+/** Logos de la época (Wikimedia Commons). `bug`: cómo va la marca de agua de la esquina. */
+export const CHANNEL_LOGOS: Record<ChannelId, { src: string; width: number; height: number; height_em: number; bug: "white" | "color" }> = {
+  "cartoon-network": { src: "https://upload.wikimedia.org/wikipedia/commons/e/e0/Cartoon_Network_logo_%281992-2004%29.svg", width: 1000, height: 290, height_em: 1.9, bug: "color" },
+  nickelodeon: { src: "https://upload.wikimedia.org/wikipedia/commons/8/8f/Nickelodeon_%281984_logo%29.svg", width: 1000, height: 163, height_em: 1.1, bug: "white" },
+  jetix: { src: "https://upload.wikimedia.org/wikipedia/commons/0/0a/JetixLogo.png", width: 500, height: 330, height_em: 2.8, bug: "white" },
+  disney: { src: "https://upload.wikimedia.org/wikipedia/commons/8/88/2002_Disney_Channel_logo_%28Alt%29.svg", width: 1000, height: 817, height_em: 3.2, bug: "white" },
+  warner: { src: "https://upload.wikimedia.org/wikipedia/commons/8/8a/Warner_Channel_logo.png", width: 170, height: 236, height_em: 3.6, bug: "color" },
+  fox: { src: "https://upload.wikimedia.org/wikipedia/commons/f/f7/FOX_wordmark-black.svg", width: 1000, height: 431, height_em: 1.9, bug: "white" },
+};
+
 /**
- * Marca del canal (tipográfica, animada). Los tamaños "lg" (identificaciones) y "md" (placas con más
- * información) se miden en ancho de la tele (unidades cqw), así entran igual en el celular y en modo cine;
- * "sm" es la marca de agua de la esquina. Con `animate` entra con la animación propia de cada canal.
+ * Logo del canal. "lg" (identificaciones) y "md" (placas con más información) se miden en ancho de la
+ * tele (unidades cqw) y van sobre una placa blanca, así se leen sobre cualquier fondo; "sm" es la marca
+ * de agua de la esquina (blanca y translúcida, como en la tele). Con `animate` entra con la animación del canal.
  */
 export function ChannelWordmark({ id, size = "lg", animate = false }: { id: ChannelId; size?: "lg" | "md" | "sm"; animate?: boolean }) {
-  const sm = size === "sm";
-  const k = size === "md" ? 0.6 : 1;
-  /** Tamaño de letra en ancho de la tele; los bordes y márgenes van en em, así escalan juntos. */
-  const font = (cqw: number): React.CSSProperties => (sm ? {} : { fontSize: `${cqw * k}cqw` });
-  const anim = (name: string) => (animate ? `${name} ` : "");
-  switch (id) {
-    case "cartoon-network":
-      return (
-        <span className={`${anim("wm-cn")}inline-flex flex-col items-stretch`} style={font(6.5)}>
-          <span className={`border-black bg-white font-display uppercase leading-none text-black ${sm ? "border-2 px-1.5 py-0.5 text-[10px] sm:text-xs" : "border-[0.12em] px-[0.35em] py-[0.15em]"}`}>
-            Cartoon Network
-          </span>
-          <span className={`checker ${sm ? "h-1" : "h-[0.3em]"}`} style={sm ? undefined : { backgroundSize: "0.3em 0.3em" }} aria-hidden />
-        </span>
-      );
-    case "nickelodeon":
-      return (
-        <span
-          className={`${anim("wm-nick")}inline-block border-black bg-[#ff7a00] font-display leading-none text-white [text-shadow:0.05em_0.05em_0_#000] ${
-            sm ? "border-2 px-2 py-0.5 text-[10px] sm:text-xs" : "border-[0.1em] px-[0.6em] py-[0.35em]"
-          }`}
-          style={{ ...font(6.5), borderRadius: "46% 54% 41% 59% / 58% 44% 56% 42%" }}
-        >
-          nickelodeon
-        </span>
-      );
-    case "jetix":
-      return (
-        <span className={`${anim("wm-jetix")}relative inline-block -skew-x-12`} style={font(9)}>
-          <span className={`block border-white bg-black font-display uppercase italic leading-none text-white ${sm ? "border-2 px-1.5 text-[11px] sm:text-sm" : "border-[0.08em] px-[0.4em] py-[0.12em]"}`}>
-            Jetix
-          </span>
-          {/* Estela de velocidad debajo de la marca. */}
-          <span className={`absolute -bottom-[0.18em] left-[15%] right-[-12%] block bg-[#e4002b] ${sm ? "h-0.5" : "h-[0.12em]"}`} aria-hidden />
-        </span>
-      );
-    case "disney":
-      return (
-        <span
-          className={`${anim("wm-disney")}relative inline-block font-display leading-none text-white [text-shadow:0_0_0.2em_#9bd1ff,0.05em_0.05em_0_#061a66] ${sm ? "px-1 text-xs sm:text-sm" : "px-[0.3em] pt-[0.3em]"}`}
-          style={font(10)}
-        >
-          <span className={`${anim("wm-disney-arc")}pointer-events-none absolute inset-x-0 top-0 h-[0.7em] rounded-[50%] border-t-[0.06em] border-white/80`} aria-hidden />
-          Disney
-          <span className="absolute -right-[0.1em] top-0 text-[0.45em]" aria-hidden>
-            ✦
-          </span>
-        </span>
-      );
-    case "warner":
-      return (
-        <span
-          className={`${anim("wm-warner")}inline-grid place-items-center rounded-full border-black bg-[#0a2d6e] font-display uppercase leading-none text-[#ffd400] [text-shadow:0.06em_0.06em_0_#000] ${
-            sm ? "border-2 px-2 py-0.5 text-[10px] sm:text-xs" : "size-[5.4em] border-[0.15em]"
-          }`}
-          style={{ ...font(4.5), boxShadow: sm ? undefined : "0 0 0 0.2em #ffd400, 0 0 0 0.35em #000" }}
-        >
-          <span className="text-center">Warner{sm ? " " : <br />}Channel</span>
-        </span>
-      );
-    case "fox":
-      return (
-        <span
-          className={`${anim("wm-fox")}inline-block border-[#f2f2f2] bg-[#111] font-display uppercase leading-none tracking-widest text-[#f2f2f2] ${sm ? "border-2 px-1.5 text-[11px] sm:text-sm" : "border-[0.06em] px-[0.3em] py-[0.1em]"}`}
-          style={font(12)}
-        >
-          FOX
-        </span>
-      );
+  const logo = CHANNEL_LOGOS[id];
+  const name = channelNames[id];
+  if (size === "sm") {
+    return (
+      <Image
+        src={logo.src}
+        alt={name}
+        width={logo.width}
+        height={logo.height}
+        unoptimized
+        className="h-5 w-auto sm:h-7"
+        style={logo.bug === "white" ? { filter: "brightness(0) invert(1) drop-shadow(1px 1px 0 rgb(0 0 0 / 0.6))" } : undefined}
+      />
+    );
   }
+  const anim = animate ? `wm-${ANIMATIONS[id]} ` : "";
+  return (
+    <span
+      className={`${anim}inline-block rounded-[0.35em] border-[0.12em] border-black bg-white px-[0.45em] py-[0.3em] shadow-[0.15em_0.15em_0_#000]`}
+      style={{ fontSize: `${(size === "md" ? 0.6 : 1) * 4}cqw` }}
+    >
+      <Image src={logo.src} alt={name} width={logo.width} height={logo.height} unoptimized priority className="block w-auto max-w-none" style={{ height: `${logo.height_em}em` }} />
+    </span>
+  );
 }
+
+/** El logo tal cual (a color), para las pestañas de canales y otras listas. */
+export function ChannelLogo({ id, className = "h-8 w-auto" }: { id: ChannelId; className?: string }) {
+  const logo = CHANNEL_LOGOS[id];
+  return <Image src={logo.src} alt={channelNames[id]} width={logo.width} height={logo.height} unoptimized className={className} />;
+}
+
+/** Animación de entrada de cada logo (clases wm-* de globals.css). */
+const ANIMATIONS: Record<ChannelId, string> = { "cartoon-network": "cn", nickelodeon: "nick", jetix: "jetix", disney: "disney", warner: "warner", fox: "fox" };
+const channelNames: Record<ChannelId, string> = {
+  "cartoon-network": "Cartoon Network",
+  nickelodeon: "Nickelodeon",
+  jetix: "Jetix",
+  disney: "Disney Channel",
+  warner: "Warner Channel",
+  fox: "FOX",
+};
 
 /**
  * Identificación animada del canal (pantalla completa de la tele): fondo de marca en movimiento,
