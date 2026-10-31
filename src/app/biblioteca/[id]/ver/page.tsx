@@ -6,7 +6,7 @@ import StateMessage from "@/components/series/StateMessage";
 import WatchClient from "./WatchClient";
 
 type Params = Promise<{ id: string }>;
-type Search = Promise<{ ep?: string; t?: string; auto?: string }>;
+type Search = Promise<{ ep?: string; t?: string; auto?: string; especial?: string }>;
 
 export async function generateMetadata({ params, searchParams }: { params: Params; searchParams: Search }): Promise<Metadata> {
   const [result, { ep }] = await Promise.all([loadSeries((await params).id), searchParams]);
@@ -55,6 +55,7 @@ export default async function VerPage({ params, searchParams }: { params: Params
       index={index}
       startAt={Number.isFinite(t) && t > 0 ? t : 0}
       autoPlay={query.auto === "1"}
+      halloween={query.especial === "halloween"}
     />
   );
 }

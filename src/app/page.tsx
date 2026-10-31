@@ -4,6 +4,7 @@ import { channels } from "@/data/channels";
 import { getGenres } from "@/lib/lacartoons-schedule";
 import { OnAirProvider } from "@/lib/use-on-air";
 import ContinueWatching from "@/components/series/ContinueWatching";
+import HalloweenSpecials from "@/components/series/HalloweenSpecials";
 import SurpriseButton from "@/components/series/SurpriseButton";
 import { SectionTitle } from "@/components/PageHeader";
 import { HeroTv, OnAirChannels, OnAirTicker } from "./HomeLive";
@@ -58,6 +59,8 @@ export default async function Home() {
         </section>
 
         <OnAirTicker />
+
+        <HalloweenSpecials />
 
         <ContinueWatching />
 

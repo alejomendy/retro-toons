@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, ListVideo, Minimize2, Play, X } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Clapperboard, Ghost, ListVideo, Minimize2, Play, Shuffle, X } from "lucide-react";
 import VideoPlayer from "@/components/LazyVideoPlayer";
 import EpisodeBrowser from "@/components/series/EpisodeBrowser";
 import FavoriteButton from "@/components/series/FavoriteButton";
@@ -11,8 +11,11 @@ import { episodeLabel, seriesHref, watchHref, type LcEpisode } from "@/lib/lacar
 import { getSeriesProgress, isFinished, recordFinishedEpisode, removeProgress, saveProgress, useMarathon } from "@/lib/user-library";
 import { theaterBand, theaterWidth, useTheaterMode } from "@/lib/use-theater";
 import { prefetchStreams } from "@/lib/prefetch-streams";
+import { halloweenHref, halloweenSpecials, type HalloweenSpecial } from "@/data/halloween";
 
 const NEXT_COUNTDOWN_SECONDS = 8;
+/** Especiales de Halloween ya vistos en esta pestaña: el azar no los repite hasta ver todos. */
+const HALLOWEEN_SEEN_KEY = "rt-halloween-vistos";
 
 interface Props {
   series: { id: string; name: string; poster: string | null };
@@ -20,9 +23,11 @@ interface Props {
   index: number;
   startAt: number;
   autoPlay: boolean;
+  /** Maratón de Halloween: al terminar sigue otro especial al azar (en vez del próximo episodio). */
+  halloween?: boolean;
 }
 
-export default function WatchClient({ series, videos, index, startAt, autoPlay }: Props) {
+export default function WatchClient({ series, videos, index, startAt, autoPlay, halloween = false }: Props) {
   const router = useRouter();
   const episode = videos[index];
   const prev = index > 0 ? videos[index - 1] : undefined;
@@ -34,6 +39,13 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
   const marathon = useMarathon();
   const marathonHere = marathon && marathon.seriesId === series.id && marathon.count >= 2 ? marathon.count : 0;
   const [resumeAt, setResumeAt] = useState<number | null>(null);
+  // En la maratón de Halloween lo que sigue es otro especial al azar (se elige en el navegador).
+  const [spooky, setSpooky] = useState<HalloweenSpecial | null>(null);
+  useEffect(() => {
+    if (!halloween) return;
+    setSpooky(pickHalloween(episode.id));
+  }, [halloween, episode.id]);
+  const upNext = halloween ? spooky : next;
 
   // Al entrar a un episodio sin ?t, ofrecer seguir desde donde quedó (localStorage solo en el cliente).
   useEffect(() => {
@@ -70,23 +82,27 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
 
   const handleEnded = useCallback(
     (episodeId: string) => {
-      if (episodeId === episode.id && next) setCountdown(NEXT_COUNTDOWN_SECONDS);
+      if (episodeId === episode.id && upNext) setCountdown(NEXT_COUNTDOWN_SECONDS);
     },
-    [episode.id, next],
+    [episode.id, upNext],
   );
 
   // Mientras se ve un episodio, se dejan listas las fuentes del siguiente.
+  const upNextId = upNext?.id;
   useEffect(() => {
-    if (!next) return;
-    const timer = window.setTimeout(() => prefetchStreams(next.id), 15_000);
+    if (!upNextId) return;
+    const timer = window.setTimeout(() => prefetchStreams(upNextId), 15_000);
     return () => window.clearTimeout(timer);
-  }, [next]);
+  }, [upNextId]);
 
   const goNext = useCallback(() => {
-    if (!next) return;
     setCountdown(null);
-    router.push(`${watchHref(series.id, next.id)}&auto=1`, { scroll: false });
-  }, [next, router, series.id]);
+    if (halloween) {
+      if (spooky) router.push(`${halloweenHref(spooky)}&auto=1`, { scroll: false });
+      return;
+    }
+    if (next) router.push(`${watchHref(series.id, next.id)}&auto=1`, { scroll: false });
+  }, [halloween, spooky, next, router, series.id]);
 
   useEffect(() => {
     if (countdown === null) return;
@@ -101,10 +117,10 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
   return (
     <div className="space-y-5">
       <Link
-        href={seriesHref(series.id)}
+        href={halloween ? "/#halloween" : seriesHref(series.id)}
         className="inline-flex items-center gap-1 font-bold text-accent hover:underline focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
       >
-        <ArrowLeft className="size-4" /> {series.name}
+        <ArrowLeft className="size-4" /> {halloween ? "Especiales de Noche de Brujas" : series.name}
       </Link>
 
       {/* Modo cine: el reproductor toma todo el ancho y la lista baja (mismo árbol: el video no se corta). */}
@@ -120,11 +136,18 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
               onEnded={handleEnded}
             />
 
-            {countdown !== null && next && (
-              <div className="absolute inset-x-3 bottom-16 z-20 ml-auto max-w-sm rounded-xl border-4 border-black bg-panel p-4 shadow-[5px_5px_0_#000]" role="dialog" aria-label="Siguiente episodio">
-                <p className="font-mono text-lg text-white/70">Siguiente en {countdown}…</p>
+            {countdown !== null && upNext && (
+              <div
+                className={`absolute inset-x-3 bottom-16 z-20 ml-auto max-w-sm rounded-xl border-4 border-black p-4 shadow-[5px_5px_0_#000] ${halloween ? "bg-[#1a0b2e]" : "bg-panel"}`}
+                role="dialog"
+                aria-label={halloween ? "Siguiente especial de Halloween" : "Siguiente episodio"}
+              >
+                <p className={`font-mono text-lg ${halloween ? "text-[#f97316]" : "text-white/70"}`}>
+                  {halloween ? `🎃 Otro especial en ${countdown}…` : `Siguiente en ${countdown}…`}
+                </p>
+                {halloween && spooky && <p className="truncate text-sm font-bold text-white/80">{spooky.seriesName}</p>}
                 <p className="font-bold leading-tight">
-                  {episodeLabel(next)} · {next.title}
+                  {episodeLabel(upNext)} · {upNext.title}
                 </p>
                 <div className="mt-3 flex gap-2">
                   <button
@@ -169,6 +192,23 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay }
 
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
+              {halloween && (
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <p className="sticker inline-flex items-center gap-1 rounded-md bg-[#f97316] px-2 py-0.5 font-mono text-lg text-black">
+                    <Ghost className="size-4" /> Maratón de Noche de Brujas
+                  </p>
+                  {spooky && (
+                    <button
+                      type="button"
+                      onClick={goNext}
+                      className="inline-flex items-center gap-1 rounded-md border-2 border-black bg-[#1a0b2e] px-2 py-0.5 text-sm font-bold text-white hover:bg-black focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#f97316]"
+                    >
+                      <Shuffle className="size-4" /> Otro especial al azar
+                    </button>
+                  )}
+                </div>
+              )}
+              {halloween && <p className="font-display text-xl text-white">{series.name}</p>}
               {marathonHere > 0 && (
                 <p className="sticker mb-2 inline-block rounded-md bg-[#ff3ea5] px-2 py-0.5 font-mono text-lg text-white">
                   🔥 Maratón: {marathonHere} episodios seguidos
@@ -263,4 +303,22 @@ function formatTime(seconds: number): string {
   const m = Math.floor((s % 3600) / 60);
   const sec = String(s % 60).padStart(2, "0");
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/** Un especial de Halloween al azar que no sea el actual ni uno ya visto en esta pestaña (si ya se vieron todos, vuelve a empezar). */
+function pickHalloween(currentId: string): HalloweenSpecial | null {
+  let seen: string[] = [];
+  try {
+    seen = JSON.parse(sessionStorage.getItem(HALLOWEEN_SEEN_KEY) ?? "[]");
+  } catch {}
+  if (!seen.includes(currentId)) seen.push(currentId);
+  let pool = halloweenSpecials.filter((e) => !seen.includes(e.id));
+  if (pool.length === 0) {
+    seen = [currentId];
+    pool = halloweenSpecials.filter((e) => e.id !== currentId);
+  }
+  try {
+    sessionStorage.setItem(HALLOWEEN_SEEN_KEY, JSON.stringify(seen));
+  } catch {}
+  return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
 }
