@@ -3,7 +3,7 @@
 La tele de la tarde de los 90s y 2000s, en **español latino**: seis canales con programación semanal en vivo y una biblioteca para ver cualquier serie cuando quieras.
 
 - **Programación** (`/programacion`): Cartoon Network, Nickelodeon, Jetix, Disney, Warner Channel y FOX, cada uno con su grilla de lunes a viernes, especial del viernes y grillas propias de sábado y domingo. La tele pasa lo que está al aire desde el minuto que corresponde, con placa del canal, zócalo «Estás viendo», tanda con cuenta regresiva, control remoto (↑/↓, 1–6, deslizar en el celular) y modo cine estilo YouTube.
-- **Biblioteca** (`/biblioteca`): todas las series de LACartoons con búsqueda, filtros por cadena, favoritos y «Continuar viendo»; más los clásicos que solo están en canales oficiales de YouTube o Pluto TV.
+- **Biblioteca** (`/biblioteca`): series de LACartoons con búsqueda, filtros por cadena, favoritos y «Continuar viendo»; además, un explorador paginado de Cartoon Network y Disney Channel alimentado por TMDB, con temporadas, episodios, avances y búsqueda de videos dentro de canales de YouTube configurados.
 
 ```bash
 npm install
@@ -49,6 +49,10 @@ Se pueden correr a mano desde la pestaña **Actions** → workflow → **Run wor
 | `GET /api/series/:episodeId/streams` | Fuentes del episodio → `{ success, streams }` |
 | `GET /api/programacion?canal=&fecha=YYYY-MM-DD` | Grilla del día → `{ success, canal, slots }` |
 | `GET /api/hls?url=` | Proxy de listas `.m3u8` de Pluto TV (CORS) |
+| `GET /api/catalog/networks?network=cartoon-network\|disney-channel&page=1` | Catálogo paginado de series por cadena (TMDB) |
+| `GET /api/catalog/series/:id` | Detalles, temporadas, avances y plataformas disponibles en TMDB |
+| `GET /api/catalog/series/:id/seasons/:season` | Episodios de una temporada con títulos en español cuando existen |
+| `GET /api/catalog/episode-video?...` | Busca un video embebible en canales permitidos por `YOUTUBE_CHANNEL_IDS` |
 
 Errores: `{ success: false, error, code }` con `code` en `ADDON_UNREACHABLE`, `ADDON_BAD_RESPONSE`, `INVALID_ID`, `SERIES_NOT_FOUND`, `NO_EPISODES`, `NO_STREAMS`, `MALFORMED_DATA`.
 
@@ -61,12 +65,12 @@ Configuración en `.env.local` (ver `.env.example`). **Nunca se muestra texto en
 | LACartoons (addon) | Catálogo, episodios y video de la programación y la biblioteca | — |
 | [TMDB](https://developer.themoviedb.org) | Pósters y fondos de las series (si hay una coincidencia confiable), y datos de las series de otras fuentes | `TMDB_API_KEY` o `TMDB_READ_TOKEN` (gratis) |
 | [Doblaje Wiki](https://doblaje.fandom.com/es), wikis de fans, [Wikipedia ES](https://es.wikipedia.org) | Títulos latinos y sinopsis de las series de otras fuentes | No necesita (`WIKIMEDIA_CONTACT` recomendado) |
-| [YouTube Data API v3](https://developers.google.com/youtube/v3) | Episodios de canales oficiales | `YOUTUBE_API_KEY` (gratis) |
+| [YouTube Data API v3](https://developers.google.com/youtube/v3) | Episodios y avances de canales explícitamente permitidos | `YOUTUBE_API_KEY` + `YOUTUBE_CHANNEL_IDS` |
 | Pluto TV | Episodios gratis con publicidad (vía `/api/hls`) | No necesita |
 
-### Canales oficiales de YouTube
+### Canales de YouTube permitidos
 
-Cada serie de `shows.ts` puede tener `youtubeChannels`: canales **oficiales** que suben episodios completos. Se lee la lista completa de subidas y se cruza con los episodios por **nombre** (latino u original) o por **número** («T1 EP5», «S01E05»; salvo `matchByNumber: false`). Se descartan compilados y videos que no duran lo que un episodio. Hoy aportan, entre otras, *Tres Espías Sin Límite* y *Kid vs. Kat*. Para sumar un canal: verificá que sea oficial y revisá con una muestra que nombre y número lleven al mismo episodio.
+La búsqueda nueva por episodio requiere que `YOUTUBE_CHANNEL_IDS` contenga canales oficiales o canales para los que tengas autorización. No se consulta todo YouTube ni se garantiza que cada episodio esté publicado. Cada serie de `shows.ts` también puede tener `youtubeChannels`: canales **oficiales** que suben episodios completos. Se lee la lista completa de subidas y se cruza con los episodios por **nombre** (latino u original) o por **número** («T1 EP5», «S01E05»; salvo `matchByNumber: false`). Se descartan compilados y videos que no duran lo que un episodio. Hoy aportan, entre otras, *Tres Espías Sin Límite* y *Kid vs. Kat*. Para sumar un canal: verificá que sea oficial y revisá con una muestra que nombre y número lleven al mismo episodio.
 
 ### Pluto TV
 
@@ -92,3 +96,19 @@ Los episodios a demanda de Pluto TV se reproducen en la página con `hls.js`. Pl
 - `scripts/` — `check-playable.mjs`, `prewarm.mjs`, `validate-channels.mjs`
 - `addon/` — imagen Docker del addon para Render
 - `.github/workflows/` — CI y tareas automáticas
+
+## Catálogos Cartoon Network y Disney Channel
+
+La sección `/biblioteca` incluye un explorador por cadena basado en TMDB Discover TV: Cartoon Network (network ID `56`) y Disney Channel (network ID `54`). Se pueden paginar resultados, abrir fichas, consultar temporadas y episodios, ver avances disponibles y consultar plataformas por región. La metadata se solicita en `es-MX` y se mantiene la regla de no mostrar títulos de episodio en inglés cuando falta traducción. TMDB aporta datos e imágenes, no archivos de video.
+
+Para buscar episodios en YouTube, la ruta `/api/catalog/episode-video` exige `YOUTUBE_API_KEY` y una lista explícita de canales en `YOUTUBE_CHANNEL_IDS`. La búsqueda filtra por serie, temporada y episodio, y solo devuelve videos embebibles de esos canales. La API no verifica la pista de audio: el idioma queda como no confirmado hasta comprobarlo en reproducción.
+
+## Addons de Stremio
+
+La sección `/addons` integra AnimVault y Torrentio. Torrentio es un addon de tipo `stream`: no publica catálogos ni metadatos propios. Para usarlo, la interfaz busca el título en Cinemeta, obtiene su identificador IMDb y consulta Torrentio con el ID de la película o el ID individual del episodio (`tt...:temporada:episodio`). Cinemeta está configurado como proveedor auxiliar oculto en las pestañas.
+
+Las peticiones pasan por `/api/stremio/:addon/...`. El proxy solo acepta los identificadores configurados y reenvía las rutas del protocolo Stremio. Esta integración no modifica ni reemplaza LACartoons.
+
+La pantalla de Torrentio muestra las fuentes que devuelve su endpoint para el elemento consultado. Las fuentes HTTP(S) directas se pueden intentar reproducir en el reproductor web; HLS usa `hls.js` cuando el navegador lo requiere. Los resultados P2P se muestran con su hash, índice de archivo y enlace magnet cuando el addon aporta esos datos. Los enlaces magnet requieren una aplicación compatible y no se reproducen directamente como video HTML5; el campo `fileIdx` se informa porque puede ser necesario elegir el archivo correcto dentro del torrent. No se incluye un cliente P2P en el navegador ni un servidor Debrid: para reproducción interna se necesitan fuentes HTTP/HLS o videos embebibles.
+
+**Limitaciones:** Torrentio no garantiza que cada episodio tenga fuentes, que las fuentes sigan disponibles, ni que incluyan español latino. Las etiquetas de idioma son heurísticas basadas en el texto devuelto por la fuente y no verifican la pista de audio. La disponibilidad y los derechos de distribución dependen de cada proveedor externo. No se intenta extraer ni incrustar video protegido de Disney+.

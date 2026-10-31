@@ -7,6 +7,7 @@ import BibliotecaClient from "./BibliotecaClient";
 import ExternalSeries, { ExternalSeriesSkeleton } from "./ExternalSeries";
 import SurpriseButton from "@/components/series/SurpriseButton";
 import AchievementsSection from "@/components/series/AchievementsSection";
+import NetworkCatalog from "@/components/catalog/NetworkCatalog";
 
 export const metadata: Metadata = { title: "Biblioteca — RetroToons" };
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ export default async function BibliotecaPage() {
         Elegí cualquier serie y mirá el episodio que quieras, cuando quieras. Todo en español latino.
       </PageHeader>
       <ContinueWatching />
+      <NetworkCatalog />
       <section className="space-y-5" aria-labelledby="todas-las-series">
         <SectionTitle id="todas-las-series">Todas las series</SectionTitle>
         <Suspense>

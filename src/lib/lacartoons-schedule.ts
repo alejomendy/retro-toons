@@ -61,8 +61,11 @@ const fullCatalog = unstable_cache(
 /** Serie con su arte, en caché un día (la usan la grilla, las páginas de la serie y la API). */
 export const cachedSeries = unstable_cache(async (id: string) => withArtwork(await fetchSeries(id)), ["lacartoons-series-art"], { revalidate: CACHE_SECONDS });
 
+/** Todo el catálogo de LACartoons (en caché un día). */
+export const getFullCatalog = () => fullCatalog();
+
 /** Para comparar nombres: sin tildes, signos ni palabras de relleno ("La Serie Animada", "El", "Las"...). */
-function normalize(name: string): string {
+export function normalize(name: string): string {
   return name
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -118,7 +121,7 @@ const unique = <T,>(list: T[]) => [...new Set(list)];
  * scripts/check-playable.mjs una vez por semana. Nunca se consulta al addon durante una visita:
  * eso lo saturaba y hacía que la grilla cambiara al recargar. Series sin dato: se asume que sí.
  */
-function isPlayable(series: LcSeries): boolean {
+export function isPlayable(series: Pick<LcSeries, "id">): boolean {
   return (playableList.series as Record<string, { playable: boolean } | undefined>)[series.id]?.playable !== false;
 }
 

@@ -149,6 +149,38 @@ export async function findTmdbArt(name: string, year?: number | null): Promise<{
   };
 }
 
+export interface TmdbImdbMatch {
+  tmdbId: number;
+  type: "series" | "movie";
+  name: string;
+  originalName: string;
+  overview: string | null;
+  poster: string | null;
+  backdrop: string | null;
+  year: number | null;
+}
+
+/** Ficha en español latino de un título a partir de su ID de IMDb (los addons de Stremio usan `tt...`). */
+export async function findByImdb(imdbId: string): Promise<TmdbImdbMatch | null> {
+  if (!/^tt\d{5,10}$/.test(imdbId)) return null;
+  type Hit = { id: number; name?: string; title?: string; original_name?: string; original_title?: string; overview?: string; poster_path: string | null; backdrop_path: string | null; first_air_date?: string; release_date?: string };
+  const res = await tmdb<{ tv_results: Hit[]; movie_results: Hit[] }>(`/find/${imdbId}`, { external_source: "imdb_id", language: LANG });
+  const tv = res?.tv_results[0];
+  const hit = tv ?? res?.movie_results[0];
+  if (!hit) return null;
+  const date = hit.first_air_date || hit.release_date;
+  return {
+    tmdbId: hit.id,
+    type: tv ? "series" : "movie",
+    name: hit.name || hit.title || "",
+    originalName: hit.original_name || hit.original_title || "",
+    overview: hit.overview?.trim() || null,
+    poster: hit.poster_path ? `${IMG}/w342${hit.poster_path}` : null,
+    backdrop: hit.backdrop_path ? `${IMG}/w1280${hit.backdrop_path}` : null,
+    year: date ? Number(date.slice(0, 4)) : null,
+  };
+}
+
 export async function findTmdbId(originalTitle: string, year: number): Promise<number | null> {
   return (await findTmdb(originalTitle, year))?.id ?? null;
 }
@@ -234,20 +266,24 @@ export async function getTmdbSeason(id: number, season: number): Promise<TmdbEpi
   const byNumber = (raw: RawSeason | null) => new Map((raw?.episodes ?? []).map((e) => [e.episode_number, e]));
   const esMap = byNumber(es);
   const enMap = byNumber(en);
+  // Si es-MX no tiene traducción/publicación para la temporada, conservar
+  // la estructura desde es-ES en vez de devolver una temporada vacía.
+  const baseEpisodes = mx?.episodes?.length ? mx.episodes : es?.episodes ?? [];
 
-  return (mx?.episodes ?? []).map((e) => {
+  return baseEpisodes.map((e) => {
+    const eMx = mx?.episodes?.find((entry) => entry.episode_number === e.episode_number);
     const eEs = esMap.get(e.episode_number);
     const enName = enMap.get(e.episode_number)?.name;
     return {
       season: e.season_number,
       number: e.episode_number,
-      name: spanishName(e.name, enName),
+      name: spanishName(eMx?.name, enName),
       nameSpain: spanishName(eEs?.name, enName),
-      overview: e.overview || null,
+      overview: eMx?.overview || null,
       overviewSpain: eEs?.overview || null,
-      still: e.still_path ? `${IMG}/w300${e.still_path}` : null,
-      runtime: e.runtime,
-      airDate: e.air_date,
+      still: (eMx?.still_path || eEs?.still_path) ? `${IMG}/w300${eMx?.still_path || eEs?.still_path}` : null,
+      runtime: eMx?.runtime ?? eEs?.runtime ?? null,
+      airDate: eMx?.air_date ?? eEs?.air_date ?? null,
       originalName: enName && !isGeneric(enName) ? enName : null,
     };
   });
