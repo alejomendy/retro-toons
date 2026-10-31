@@ -76,7 +76,8 @@ export default function AddonsClient() {
     readJson<StremioManifest>(`/api/stremio/${selected}/manifest.json`, controller.signal)
       .then((result) => {
         setManifest(result);
-        const first = result.catalogs?.find(browsable);
+        // Primero un catálogo de series: es lo que la biblioteca puede reproducir.
+        const first = result.catalogs?.find((c) => browsable(c) && c.type === "series") ?? result.catalogs?.find(browsable);
         setCatalogId(first ? catalogKey(first) : "");
         if (!first) setLoading(false);
       })

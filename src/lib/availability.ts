@@ -45,35 +45,80 @@ function sameName(a: string, b: string): boolean {
   return 1 - distance(a, b) / Math.max(a.length, b.length) >= 0.86;
 }
 
-const buildIndex = unstable_cache(
+const CACHE_SECONDS = 12 * 60 * 60;
+/** Lo que se espera a la lista de series locales antes de responder sin ellas (se sigue armando por detrás). */
+const EXTERNAL_WAIT_MS = 3000;
+
+/** Series de LACartoons con video, más los nombres de las series locales que están en LACartoons. */
+const lacartoonsIndex = unstable_cache(
   async (): Promise<IndexEntry[]> => {
-    const catalog = await getFullCatalog();
-    const entries: IndexEntry[] = catalog
+    const entries: IndexEntry[] = (await getFullCatalog())
       .filter((series) => isPlayable(series))
       .map((series) => ({ key: normalize(series.name), href: `/biblioteca/${series.id}`, title: series.name }));
-
-    // Series locales: sus nombres (latino y original) llevan a la misma serie de LACartoons si está,
-    // o a su página propia si se ven desde YouTube oficial o Pluto TV.
-    const external = new Set((await getExternalSeries().catch(() => [])).map((s) => s.id));
     for (const show of shows) {
-      const names = [show.title, show.originalTitle].map(normalize).filter((k) => k.length >= 3);
+      const names = localNames(show);
       const lcKey = normalize(show.lacartoons ?? show.title);
       const inLc = entries.find((e) => sameName(e.key, lcKey) || names.some((k) => sameName(e.key, k)));
-      const target = external.has(show.id) ? { href: `/biblioteca/${show.id}`, title: show.title } : inLc;
-      if (!target) continue;
-      for (const key of names) entries.push({ key, href: target.href, title: target.title });
+      if (inLc) entries.push(...names.map((key) => ({ key, href: inLc.href, title: inLc.title })));
     }
     return entries;
   },
-  ["retrotoons-watch-index-v1"],
-  { revalidate: 12 * 60 * 60 },
+  ["retrotoons-watch-index-v2"],
+  { revalidate: CACHE_SECONDS },
 );
+
+/**
+ * Series locales que se ven desde YouTube oficial o Pluto TV. Armar la lista consulta esas fuentes
+ * serie por serie (puede tardar minutos en frío), por eso va en su propia caché.
+ */
+const externalIds = unstable_cache(async (): Promise<string[]> => (await getExternalSeries()).map((s) => s.id), ["retrotoons-external-ids-v1"], {
+  revalidate: CACHE_SECONDS,
+});
+
+function localNames(show: (typeof shows)[number]): string[] {
+  return [show.title, show.originalTitle].map(normalize).filter((k) => k.length >= 3);
+}
+
+/** Una misma respuesta consulta cientos de títulos: el índice se arma una vez y se reusa un rato. */
+let memo: { at: number; full: boolean; promise: Promise<IndexEntry[]> } | null = null;
+const MEMO_MS = 60_000;
+
+function buildIndex(): Promise<IndexEntry[]> {
+  // Un índice armado sin las series locales (en frío) se rehace en cuanto estén listas.
+  if (memo && Date.now() - memo.at < (memo.full ? MEMO_MS : EXTERNAL_WAIT_MS)) return memo.promise;
+  const current = { at: Date.now(), full: false, promise: Promise.resolve<IndexEntry[]>([]) };
+  current.promise = assembleIndex(() => (current.full = true));
+  memo = current;
+  return current.promise;
+}
+
+async function assembleIndex(onFull: () => void): Promise<IndexEntry[]> {
+  let ready = false;
+  const pending = externalIds()
+    .then((ids) => ((ready = true), ids))
+    .catch((): string[] => []);
+  const index = await assembleWith(pending);
+  if (ready) onFull();
+  return index;
+}
+
+async function assembleWith(pending: Promise<string[]>): Promise<IndexEntry[]> {
+  const [lc, external] = await Promise.all([
+    lacartoonsIndex().catch((): IndexEntry[] => []),
+    // En frío no se espera a las series locales: esta respuesta sale sin ellas y la próxima ya las tiene.
+    Promise.race([pending, new Promise<string[]>((resolve) => setTimeout(() => resolve([]), EXTERNAL_WAIT_MS))]),
+  ]);
+  const ids = new Set(external);
+  // Las series locales con fuente propia van primero: ganan sobre una versión sin video de LACartoons.
+  const local = shows.filter((s) => ids.has(s.id)).flatMap((s) => localNames(s).map((key) => ({ key, href: `/biblioteca/${s.id}`, title: s.title })));
+  return [...local, ...lc];
+}
 
 /** Busca un título por cualquiera de sus nombres; primero coincidencia exacta, después aproximada. */
 export async function findWatchable(names: (string | null | undefined)[]): Promise<Watchable | null> {
   const keys = [...new Set(names.filter((n): n is string => !!n).map(normalize).filter((k) => k.length >= 3))];
   if (keys.length === 0) return null;
-  const index = await buildIndex().catch((): IndexEntry[] => []);
+  const index = await buildIndex();
   const hit = index.find((e) => keys.includes(e.key)) ?? index.find((e) => keys.some((k) => sameName(e.key, k)));
   return hit ? { href: hit.href, title: hit.title } : null;
 }

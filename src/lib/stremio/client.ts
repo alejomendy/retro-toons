@@ -84,10 +84,13 @@ async function spanishTitle(addonId: string, type: "movie" | "series", id: strin
   if (addonId === "cartoon-network" && tmdbId(id) !== null) return getTmdbTitle(type === "movie" ? "movie" : "tv", tmdbId(id)!);
   if (addonId === "animvault" && /^tt\d+$/.test(id)) {
     const found = await findByImdb(id);
-    return found ? { ...found, backdrop: found.backdrop, year: found.year ? String(found.year) : null } : null;
+    return found ? { ...found, year: found.year ? String(found.year) : null } : null;
   }
   return null;
 }
+
+/** Sin traducción, TMDB devuelve el nombre original (ej. en japonés): entonces vale más el del addon. */
+const readable = (name: string | undefined) => (name && /[a-z]/i.test(name) ? name : undefined);
 
 /**
  * Pasa una ficha del addon al formato de RetroToons. El addon de Cartoon Network viene en inglés
@@ -96,7 +99,7 @@ async function spanishTitle(addonId: string, type: "movie" | "series", id: strin
 async function normalizeMeta(addonId: string, raw: StremioMetaPreview): Promise<Normalized | null> {
   const type = raw.type === "movie" ? "movie" : "series";
   const tmdb = await spanishTitle(addonId, type, raw.id);
-  const name = tmdb?.name ?? raw.name;
+  const name = readable(tmdb?.name) ?? raw.name;
   if (!name) return null;
   const year = raw.releaseInfo ?? (raw.year ? String(raw.year) : null) ?? tmdb?.year ?? null;
   return {
