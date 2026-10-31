@@ -27,6 +27,14 @@ type VideoPlayerProps = {
      * pasa sola a otra fuente si una falla y descuenta el tiempo que tardó en sintonizar.
      */
     live?: boolean;
+    /**
+     * Tandas como en la tele: avisa (onBreak) en los cortes del episodio, que se buscan como un
+     * fundido a negro cerca de 1/3 y 2/3 de la duración.
+     */
+    breaks?: boolean;
+    onBreak?: (episodeId: string, index: number) => void;
+    /** Mientras es true el video queda en pausa (la tanda); al volver a false sigue solo. */
+    hold?: boolean;
 };
 
 type VideoJsInstance = {
@@ -55,6 +63,43 @@ type VideoJsInstance = {
 
 /** Cada cuánto se informa el progreso mientras se reproduce. */
 const PROGRESS_INTERVAL_MS = 5000;
+/** Episodios más cortos que esto (cortos de 7-11 min) no tienen tanda en el medio. */
+const MIN_BREAK_EPISODE_SECONDS = 15 * 60;
+/** Tramo del episodio donde se buscan los cortes (fracción de la duración). */
+const BREAK_SEARCH_FROM = 0.2;
+const BREAK_SEARCH_TO = 0.85;
+/** Distancia mínima entre cortes (y desde el principio), en fracción de la duración. */
+const BREAK_MIN_GAP = 0.22;
+/** Si no apareció un fundido a negro, los cortes van acá (fracción de la duración). */
+const BREAK_FALLBACKS = [0.55, 0.82];
+/** Tandas por episodio, como en la tele (3 actos). */
+const MAX_BREAKS = 2;
+/** Cada cuánto se mira el brillo del video dentro de la ventana. */
+const BREAK_SAMPLE_MS = 250;
+/** Muestras seguidas en negro para dar el corte por encontrado (~0,5 s). */
+const BREAK_DARK_SAMPLES = 2;
+
+/** ¿El cuadro actual es (casi) negro? `null` si el navegador no deja leer la imagen (video de otro origen). */
+function isDarkFrame(video: HTMLVideoElement, canvas: HTMLCanvasElement): boolean | null {
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx || video.readyState < 2) return false;
+    try {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = data.length / 4;
+        let sum = 0;
+        let bright = 0;
+        for (let i = 0; i < data.length; i += 4) {
+            const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            sum += lum;
+            if (lum > 40) bright++;
+        }
+        // Se toleran unos pocos píxeles claros: el logo del canal en una esquina.
+        return sum / pixels < 14 && bright / pixels < 0.04;
+    } catch {
+        return null;
+    }
+}
 /** Tope para conseguir las fuentes (el servidor corta al addon a los 45 s). */
 const STREAMS_TIMEOUT_MS = 50_000;
 /** Después de esto se avisa que el servidor de videos está despertando. */
@@ -102,6 +147,9 @@ export default function VideoPlayer({
     onPlaying,
     onUnavailable,
     live = false,
+    breaks = false,
+    onBreak,
+    hold = false,
 }: VideoPlayerProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const playerRef = useRef<VideoJsInstance | null>(null);
@@ -457,6 +505,74 @@ export default function VideoPlayer({
         forgetStreams(episodeId);
         setRetry((n) => n + 1);
     }
+
+    const onBreakRef = useRef(onBreak);
+    useEffect(() => {
+        onBreakRef.current = onBreak;
+    }, [onBreak]);
+
+    // Tandas: se buscan los cortes del episodio (un fundido a negro en el tramo del medio, hasta dos por
+    // episodio y separados). Si no aparece o el navegador no deja leer la imagen, van en puntos fijos.
+    useEffect(() => {
+        if (!breaks) return;
+        const canvas = document.createElement("canvas");
+        canvas.width = 32;
+        canvas.height = 18;
+        let state: { episode: string; count: number; last: number; dark: number; blind: boolean } | null = null;
+        const id = window.setInterval(() => {
+            const player = playerRef.current;
+            const video = containerRef.current?.querySelector("video");
+            if (!player || player.isDisposed() || !video || video.paused) return;
+            const episode = activeEpisodeRef.current;
+            if (!episode || episode !== episodeRef.current) return;
+            const t = player.currentTime();
+            const d = player.duration();
+            if (!Number.isFinite(d) || d < MIN_BREAK_EPISODE_SECONDS) return;
+            if (state?.episode !== episode) {
+                // Al sintonizar a mitad del episodio, los cortes que ya pasaron no cuentan.
+                const passed = BREAK_FALLBACKS.filter((f) => f * d < t + 20).length;
+                state = { episode, count: passed, last: passed > 0 ? t : 0, dark: 0, blind: false };
+            }
+            if (state.count >= MAX_BREAKS) return;
+            const fire = () => {
+                const index = state!.count;
+                state!.count++;
+                state!.last = t;
+                state!.dark = 0;
+                onBreakRef.current?.(episode, index);
+            };
+            const fraction = t / d;
+            const farEnough = t - state.last >= BREAK_MIN_GAP * d;
+            if (fraction >= BREAK_FALLBACKS[state.count] && farEnough) return fire();
+            if (state.blind || fraction < BREAK_SEARCH_FROM || fraction > BREAK_SEARCH_TO || !farEnough) return;
+            const dark = isDarkFrame(video, canvas);
+            if (dark === null) {
+                state.blind = true;
+                return;
+            }
+            state.dark = dark ? state.dark + 1 : 0;
+            if (state.dark >= BREAK_DARK_SAMPLES) fire();
+        }, BREAK_SAMPLE_MS);
+        return () => window.clearInterval(id);
+    }, [breaks]);
+
+    // La tanda pausa el video; al terminar sigue desde el mismo punto.
+    const heldRef = useRef(false);
+    useEffect(() => {
+        const player = playerRef.current;
+        if (!player || player.isDisposed()) return;
+        if (hold) {
+            heldRef.current = true;
+            player.pause();
+        } else if (heldRef.current) {
+            heldRef.current = false;
+            player.play()?.catch(() => {
+                autoMutedRef.current = true;
+                player.muted(true);
+                player.play()?.catch(() => {});
+            });
+        }
+    }, [hold]);
 
     // Todas las fuentes fallaron: se avisa para que la tele pruebe con otro episodio.
     const allFailed = streams.length > 0 && streams.every((s) => failedUrls.includes(s.url));

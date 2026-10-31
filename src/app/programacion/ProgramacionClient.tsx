@@ -439,6 +439,21 @@ function LiveTv({
   // El zócalo aparece cuando arranca cada episodio (en los externos, al sintonizar).
   const showLowerThird = !inBreak && (slot.external ? true : playingKey === playKey);
 
+  // Tanda en el medio del episodio (en los cortes que encuentra el reproductor): el video queda en pausa.
+  const [tanda, setTanda] = useState<{ key: string; index: number } | null>(null);
+  const tandaNow = tanda?.key === playKey ? tanda : null;
+  const handleBreak = useCallback(
+    (id: string, index: number) => {
+      if (id === episode.id) setTanda({ key: playKey, index });
+    },
+    [episode.id, playKey],
+  );
+  useEffect(() => {
+    if (!tandaNow) return;
+    const timer = window.setTimeout(() => setTanda(null), COMMERCIAL_BREAK_MS);
+    return () => window.clearTimeout(timer);
+  }, [tandaNow]);
+
   const bumper = <Bumper channelId={channelId} upcoming={upcoming} />;
 
   if (slot.external) {
@@ -464,8 +479,8 @@ function LiveTv({
     <TvPlayer
       title={showing.series.name}
       subtitle={`${episodeLabel(episode)} · ${episode.title} · ${showing.block}`}
-      badge={inBreak ? "TANDA" : "EN VIVO"}
-      badgeColor={inBreak ? "#7c3aed" : "#ef4444"}
+      badge={inBreak || tandaNow ? "TANDA" : "EN VIVO"}
+      badgeColor={inBreak || tandaNow ? "#7c3aed" : "#ef4444"}
       overlay={
         <>
           <VideoPlayer
@@ -476,7 +491,15 @@ function LiveTv({
             onEnded={handleEnded}
             onPlaying={handlePlaying}
             onUnavailable={handleUnavailable}
+            breaks
+            onBreak={handleBreak}
+            hold={!!tandaNow}
           />
+          {tandaNow && (
+            <div className="absolute inset-0 z-20">
+              <CommercialBreak key={`${playKey}-${tandaNow.index}`} channelId={channelId} slot={showing} upcoming={upcoming} onSkip={() => setTanda(null)} />
+            </div>
+          )}
           {/* La placa se desvanece cuando arranca el video (en vez de desaparecer de golpe). */}
           {!slot.external && !inBreak && (
             <div
@@ -561,6 +584,150 @@ function LowerThird({ slot, color, ink }: { slot: LcSlot; color: string; ink: st
           </span>
         </span>
       </div>
+    </div>
+  );
+}
+
+/** Duración de la tanda en el medio del episodio (separador de ida, promo y separador de vuelta). */
+const COMMERCIAL_BREAK_MS = 12_000;
+/** Hasta acá el separador de "Ya volvemos"; después la promo; los últimos segundos, "Regresamos". */
+const BREAK_OUT_MS = 3000;
+const BREAK_BACK_MS = 9500;
+
+/** Estilo de los separadores de cada canal: inspirados en la época, con diseño propio. */
+const BREAK_STYLES: Record<ChannelId, { background: string; size?: string; ink: string; box: string; boxInk: string; out: string; back: string }> = {
+  "cartoon-network": {
+    background: "conic-gradient(#000 25%, #fff 0 50%, #000 0 75%, #fff 0)",
+    size: "25% 50%",
+    ink: "#000",
+    box: "#000",
+    boxInk: "#fff",
+    out: "Ya volvemos",
+    back: "Regresamos con",
+  },
+  nickelodeon: {
+    background:
+      "radial-gradient(circle at 15% 20%, #7fd63b 0 9%, transparent 9.5%), radial-gradient(circle at 85% 75%, #7fd63b 0 12%, transparent 12.5%), radial-gradient(circle at 70% 15%, #7fd63b 0 5%, transparent 5.5%), #ff7a00",
+    ink: "#fff",
+    box: "#7fd63b",
+    boxInk: "#111",
+    out: "¡No cambies de canal!",
+    back: "¡Volvimos con",
+  },
+  jetix: {
+    background: "repeating-linear-gradient(-45deg, #e4002b 0 28px, #8f001b 28px 56px)",
+    ink: "#fff",
+    box: "#000",
+    boxInk: "#fff",
+    out: "¡No te vayas!",
+    back: "Sigue la acción con",
+  },
+  disney: {
+    background:
+      "radial-gradient(circle at 20% 30%, #fff 0 2px, transparent 3px), radial-gradient(circle at 75% 20%, #fff 0 2px, transparent 3px), radial-gradient(circle at 60% 80%, #fff 0 1.5px, transparent 2.5px), radial-gradient(circle at 35% 70%, #ffe680 0 2px, transparent 3px), linear-gradient(160deg, #113ccf, #061a66)",
+    ink: "#fff",
+    box: "#fff",
+    boxInk: "#113ccf",
+    out: "Enseguida volvemos",
+    back: "Volvemos con",
+  },
+  warner: {
+    background: "repeating-radial-gradient(circle at 50% 50%, #0a2d6e 0 26px, #12408f 26px 52px)",
+    ink: "#ffd400",
+    box: "#ffd400",
+    boxInk: "#0a2d6e",
+    out: "¡Ya volvemos, amigos!",
+    back: "Regresamos con",
+  },
+  fox: {
+    background: "conic-gradient(from 200deg at 50% 110%, #f2f2f2 0 10deg, #d4d4d4 10deg 20deg, #f2f2f2 20deg 30deg, #d4d4d4 30deg 40deg, #f2f2f2 40deg)",
+    ink: "#111",
+    box: "#111",
+    boxInk: "#f2f2f2",
+    out: "Ya volvemos",
+    back: "Regresamos con",
+  },
+};
+
+/**
+ * Tanda en el medio del episodio, como en la tele: separador de "Ya volvemos", promo de lo que viene
+ * (en Cartoon Network, el clásico Ahora / Luego / Después) y separador de vuelta. Dura COMMERCIAL_BREAK_MS.
+ */
+function CommercialBreak({ channelId, slot, upcoming, onSkip }: { channelId: ChannelId; slot: LcSlot; upcoming: LcSlot[]; onSkip: () => void }) {
+  const c = channelById[channelId];
+  const style = BREAK_STYLES[channelId];
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const started = Date.now();
+    const id = window.setInterval(() => setElapsed(Date.now() - started), 250);
+    return () => window.clearInterval(id);
+  }, []);
+  const phase = elapsed < BREAK_OUT_MS ? "out" : elapsed < BREAK_BACK_MS ? "promo" : "back";
+  const left = Math.max(0, Math.ceil((COMMERCIAL_BREAK_MS - elapsed) / 1000));
+  const boxClass = "inline-block rounded-lg border-4 border-black px-3 py-1 shadow-[4px_4px_0_#000]";
+
+  return (
+    <div className="absolute inset-0 overflow-hidden" style={{ background: style.background, backgroundSize: style.size, color: style.ink }} role="status" aria-live="polite">
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-4 text-center">
+        {phase === "out" && (
+          <div key="out" className="bump-pop space-y-3">
+            <p className={`${boxClass} font-display text-3xl leading-none sm:text-6xl`} style={{ backgroundColor: style.box, color: style.boxInk }}>
+              {style.out}
+            </p>
+            <p className="font-display text-lg [text-shadow:2px_2px_0_#000] sm:text-2xl" style={{ color: style.ink === "#000" || style.ink === "#111" ? "#fff" : style.ink }}>
+              <span className="rounded bg-black/70 px-2 py-0.5">con {slot.series.name}</span>
+            </p>
+          </div>
+        )}
+        {phase === "promo" && (
+          <div key="promo" className="bump-pop w-full max-w-md space-y-2">
+            {channelId === "cartoon-network" ? (
+              [
+                { label: "Ahora", s: slot },
+                { label: "Luego", s: upcoming[0] },
+                { label: "Después", s: upcoming[1] },
+              ]
+                .filter((x): x is { label: string; s: LcSlot } => !!x.s)
+                .map(({ label, s }) => (
+                  <p key={label} className="flex items-stretch overflow-hidden rounded-lg border-4 border-black bg-white text-left text-black shadow-[4px_4px_0_#000]">
+                    <span className="w-28 shrink-0 bg-black px-2 py-1 font-display text-lg uppercase text-white sm:w-32 sm:text-2xl">{label}</span>
+                    <span className="min-w-0 truncate px-3 py-1 font-display text-lg sm:text-2xl">{s.series.name}</span>
+                  </p>
+                ))
+            ) : (
+              <div className="space-y-2 rounded-xl border-4 border-black bg-black/75 p-3 text-left text-white shadow-[4px_4px_0_#000]">
+                <p className="font-mono text-xl leading-none" style={{ color: c.color === "#f2f2f2" ? "#fff" : c.color }}>
+                  MÁS TARDE EN {c.name.toUpperCase()}
+                </p>
+                {upcoming.slice(0, 3).map((s) => (
+                  <p key={s.start} className="flex gap-3 truncate font-display text-lg sm:text-xl">
+                    <span className="font-mono text-accent">{formatTime(s.start)}</span>
+                    <span className="truncate">{s.series.name}</span>
+                  </p>
+                ))}
+                {upcoming.length === 0 && <p className="font-display text-lg">Seguí con nosotros toda la noche.</p>}
+              </div>
+            )}
+          </div>
+        )}
+        {phase === "back" && (
+          <div key="back" className="bump-pop space-y-2">
+            <p className="font-display text-xl [text-shadow:2px_2px_0_#000] sm:text-3xl">
+              <span className="rounded bg-black/70 px-2 py-0.5 text-white">{style.back}</span>
+            </p>
+            <p className={`${boxClass} font-display text-2xl leading-tight sm:text-5xl`} style={{ backgroundColor: style.box, color: style.boxInk }}>
+              {slot.series.name}
+            </p>
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={onSkip}
+        className="absolute bottom-3 right-3 z-10 rounded-md border-2 border-black bg-white/90 px-2 py-1 font-mono text-base text-black hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-accent"
+      >
+        Saltar tanda · {left}
+      </button>
     </div>
   );
 }
