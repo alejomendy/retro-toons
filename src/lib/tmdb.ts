@@ -153,6 +153,41 @@ export async function findTmdbId(originalTitle: string, year: number): Promise<n
   return (await findTmdb(originalTitle, year))?.id ?? null;
 }
 
+export interface TmdbTitle {
+  name: string;
+  originalName: string;
+  overview: string | null;
+  poster: string | null;
+  backdrop: string | null;
+  year: string | null;
+}
+
+/** Nombre en español, sinopsis y arte de una serie o película por su id de TMDB (para los catálogos de los addons). */
+export async function getTmdbTitle(kind: "tv" | "movie", id: number): Promise<TmdbTitle | null> {
+  const raw = await tmdb<{
+    name?: string;
+    title?: string;
+    original_name?: string;
+    original_title?: string;
+    overview?: string;
+    poster_path: string | null;
+    backdrop_path: string | null;
+    first_air_date?: string;
+    release_date?: string;
+  }>(`/${kind}/${id}`, { language: LANG });
+  const name = raw?.name ?? raw?.title;
+  if (!raw || !name) return null;
+  const date = raw.first_air_date || raw.release_date;
+  return {
+    name,
+    originalName: raw.original_name ?? raw.original_title ?? name,
+    overview: raw.overview || null,
+    poster: raw.poster_path ? `${IMG}/w342${raw.poster_path}` : null,
+    backdrop: raw.backdrop_path ? `${IMG}/w1280${raw.backdrop_path}` : null,
+    year: date ? date.slice(0, 4) : null,
+  };
+}
+
 export async function getTmdbShow(id: number): Promise<TmdbShow | null> {
   const raw = await tmdb<RawTv>(`/tv/${id}`, {
     language: LANG,

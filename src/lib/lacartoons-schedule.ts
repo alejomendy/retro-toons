@@ -84,6 +84,21 @@ function findByName(names: string[], catalog: { series: LcSeriesSummary; key: st
   return partial[0]?.series;
 }
 
+/**
+ * Buscador de series de LACartoons por nombre sobre el catálogo en caché (lo usan los addons de
+ * Stremio para saber qué títulos se pueden ver acá). Con `exact`, sin coincidencias parciales.
+ * Si el addon no responde, no encuentra nada.
+ */
+export async function catalogMatcher(): Promise<(names: string[], exact?: boolean) => LcSeriesSummary | undefined> {
+  const list = await fullCatalog().catch((): LcSeriesSummary[] => []);
+  const catalog = list.map((series) => ({ series, key: normalize(series.name) }));
+  return (names, exact) => {
+    if (!exact) return findByName(names, catalog);
+    const keys = names.map(normalize).filter((k) => k.length >= 3);
+    return catalog.find((c) => keys.includes(c.key))?.series;
+  };
+}
+
 /** Generador pseudoaleatorio con semilla (mulberry32): mismo día, mismo resultado. */
 function seededRandom(seed: number) {
   let a = seed >>> 0;

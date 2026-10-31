@@ -3,7 +3,10 @@
 import { createContext, createElement, useContext, useEffect, useState } from "react";
 import { channels } from "@/data/channels";
 import { minutesNow } from "./schedule";
-import { loadGrids, toDateParam } from "./grids";
+import { forgetGrids, loadGrids, toDateParam } from "./grids";
+
+/** Si no llegaron las grillas, se vuelven a pedir pasado este tiempo. */
+const RETRY_MS = 15_000;
 import type { LcSlot } from "./lacartoons-types";
 import type { Channel, ChannelId } from "./types";
 
@@ -43,26 +46,37 @@ function useLoadOnAir(): OnAir[] {
   }, []);
 
   const dateKey = now ? toDateParam(now) : null;
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!dateKey) return;
     let cancelled = false;
+    let timer: number | undefined;
+    // Si falta alguna grilla se vuelve a pedir en un rato: los canales siguen "sintonizando", nunca "sin señal".
+    const again = () => {
+      timer = window.setTimeout(() => {
+        forgetGrids(dateKey);
+        setRetry((n) => n + 1);
+      }, RETRY_MS);
+    };
     loadGrids(dateKey)
       .then((all) => {
-        if (!cancelled) setGrids(Object.fromEntries(channels.map((c) => [c.id, all[c.id] ?? "error"])));
+        if (cancelled) return;
+        setGrids(Object.fromEntries(channels.map((c) => [c.id, all[c.id] ?? "error"])));
+        if (channels.some((c) => !all[c.id])) again();
       })
       .catch(() => {
-        if (!cancelled) setGrids(Object.fromEntries(channels.map((c) => [c.id, "error"])));
+        if (!cancelled) again();
       });
     return () => {
       cancelled = true;
+      window.clearTimeout(timer);
     };
-  }, [dateKey]);
+  }, [dateKey, retry]);
 
   const m = now ? minutesNow(now) : 0;
   return channels.map((channel) => {
     const grid = grids[channel.id];
-    if (!now || grid === undefined) return { channel, status: "loading" };
-    if (grid === "error") return { channel, status: "error" };
+    if (!now || grid === undefined || grid === "error") return { channel, status: "loading" };
     const i = grid.findIndex((s) => m >= s.start && m < s.end);
     return { channel, status: "ready", current: grid[i], next: i >= 0 ? grid[i + 1] : undefined };
   });

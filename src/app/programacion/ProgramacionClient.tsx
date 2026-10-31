@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Play } from "lucide-react";
 import { channelById, channelNumber, channels } from "@/data/channels";
 import PageHeader from "@/components/PageHeader";
@@ -12,7 +12,7 @@ import { prefetchStreams } from "@/lib/prefetch-streams";
 import { forgetGrids, loadGrids, toDateParam } from "@/lib/grids";
 import { useOnAir } from "@/lib/use-on-air";
 import { getLastChannel, recordChannelVisit, recordFinishedEpisode, setLastChannel } from "@/lib/user-library";
-import TvPlayer, { NoSignal } from "@/components/TvPlayer";
+import TvPlayer from "@/components/TvPlayer";
 import VideoPlayer from "@/components/LazyVideoPlayer";
 import { formatTime, minutesNow } from "@/lib/schedule";
 import { episodeLabel, lcErrorMessages, seriesHref, watchHref, type LcSlot } from "@/lib/lacartoons-types";
@@ -60,6 +60,12 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
   const loaded = grid?.key === scheduleKey ? grid : null;
   const slots = loaded && "slots" in loaded ? loaded.slots : [];
   const error = loaded && "error" in loaded ? loaded.error : null;
+  // Si la grilla no llegó, se sigue sintonizando solo (con la placa del canal) hasta que llegue.
+  useEffect(() => {
+    if (!error) return;
+    const id = window.setTimeout(() => setRetry((n) => n + 1), GRID_RETRY_MS);
+    return () => window.clearTimeout(id);
+  }, [error, retry]);
   const nowMin = now ? minutesNow(now) : 0;
   const current = now ? slots.find((s) => nowMin >= s.start && nowMin < s.end) : undefined;
   const currentIndex = current ? slots.indexOf(current) : -1;
@@ -148,12 +154,12 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
           {/* Deslizar el dedo sobre la tele cambia de canal, como el control remoto. */}
           <div onTouchStart={remote.onTouchStart} onTouchEnd={remote.onTouchEnd}>
             {current && now ? (
-              <LiveTv slot={current} now={now} upcoming={upcoming} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
+              <LiveTv slot={current} now={now} upcoming={upcoming} daySlots={slots} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
             ) : (
               <TvPlayer
-                title={error ? "Sin señal" : "Sintonizando..."}
+                title="Sintonizando..."
                 subtitle={channel.name}
-                overlay={error ? <NoSignal title="Sin señal" subtitle={error} hint={null} /> : <ChannelIdentAnimation key={channelId} id={channelId} />}
+                overlay={<ChannelIdentAnimation key={channelId} id={channelId} />}
                 channel={tvChannel(channelId)}
                 cinema={cinema}
                 onCinemaChange={setCinema}
@@ -307,6 +313,58 @@ const MIN_FILL_SECONDS = 180;
 const SHORT_BREAK_SECONDS = 15;
 /** Un rato después de arrancar el capítulo se dejan listas las fuentes de lo que puede seguir. */
 const PREFETCH_NEXT_MS = 30_000;
+/** Si la grilla no llegó, se vuelve a pedir pasado este tiempo. */
+const GRID_RETRY_MS = 15_000;
+/** Si nada del espacio tenía señal, se vuelve a probar pasado este tiempo de tanda. */
+const SIGNAL_RETRY_MS = 3 * 60_000;
+/** Series de otros horarios del canal que la tele puede pasar si la del espacio no tiene señal. */
+const RESCUE_SERIES = 8;
+
+type LineupItem = { series: LcSlot["series"]; episode: LcSlot["episode"] };
+
+/**
+ * Lo que la tele puede pasar en un espacio, en orden: el episodio de la grilla, los de reserva de la
+ * misma serie y, por si el servidor de videos de esa serie está caído, otras series del canal.
+ * Primero la repetición de lo que pasó en las horas anteriores (sus fuentes ya están en caché, así
+ * que arranca al instante) y después series de más tarde (con su último episodio de reserva, para
+ * no adelantar el que pasan en su horario). Nunca el próximo programa.
+ */
+function buildLineup(slot: LcSlot, daySlots: LcSlot[]): LineupItem[] {
+  const own = [slot.episode, ...(slot.more ?? [])].map((episode) => ({ series: slot.series, episode }));
+  const i = daySlots.findIndex((s) => s.start === slot.start);
+  const before = i < 0 ? [] : daySlots.slice(0, i).reverse().map((s) => ({ s, episode: s.episode }));
+  const after = (i < 0 ? daySlots : daySlots.slice(i + 2)).map((s) => ({ s, episode: s.more?.at(-1) ?? s.episode }));
+  const seen = new Set([slot.series.id]);
+  const rescue: LineupItem[] = [];
+  for (const { s, episode } of [...before, ...after]) {
+    if (rescue.length >= RESCUE_SERIES) break;
+    if (s.external || seen.has(s.series.id)) continue;
+    seen.add(s.series.id);
+    rescue.push({ series: s.series, episode });
+  }
+  return [...own, ...rescue];
+}
+
+/** Vueltas de búsqueda (de hasta ~45 s cada una) antes de rendirse y pasar la tanda. */
+const SIGNAL_ROUNDS = 3;
+
+/** Pide al servidor un episodio de la lista que tenga video; si no encuentra a tiempo, sigue con los que no probó. */
+async function findSignal(ids: string[], failed: string): Promise<string | null> {
+  let left = ids;
+  for (let round = 0; round < SIGNAL_ROUNDS && left.length > 0; round++) {
+    try {
+      const res = await fetch(`/api/programacion/senal?ids=${encodeURIComponent(left.join(","))}&fallo=${encodeURIComponent(failed)}`);
+      const data = (await res.json().catch(() => null)) as { id?: string | null; tried?: string[] } | null;
+      if (typeof data?.id === "string") return data.id;
+      const tried = new Set(data?.tried ?? []);
+      if (tried.size === 0) return null;
+      left = left.filter((id) => !tried.has(id));
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 interface Play {
   /** Espacio al que corresponde (si cambia el espacio, se vuelve a sintonizar). */
@@ -332,6 +390,7 @@ function LiveTv({
   slot,
   now,
   upcoming,
+  daySlots,
   channelId,
   cinema,
   onCinemaChange,
@@ -339,6 +398,8 @@ function LiveTv({
   slot: LcSlot;
   now: Date;
   upcoming: LcSlot[];
+  /** Toda la grilla del día del canal (de ahí salen otras series si la del espacio no tiene señal). */
+  daySlots: LcSlot[];
   channelId: ChannelId;
   cinema: boolean;
   onCinemaChange: (cinema: boolean) => void;
@@ -356,32 +417,55 @@ function LiveTv({
     const carry = play.early === slotKey && !play.earlyFailed;
     setPlay(carry ? { key: slotKey, pick: 0, startAt: play.startAt, follows: true } : { key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
   }
-  const reserve = slot.more ?? [];
+  const lineup = useMemo(() => buildLineup(slot, daySlots), [slot, daySlots]);
+  // Los de la misma serie (el de la grilla + slot.more); después vienen los de otras series del canal.
+  const ownCount = 1 + (slot.more?.length ?? 0);
   const pick = play.key === slotKey ? play.pick : 0;
   // El próximo programa, si empieza justo cuando termina este (para adelantarlo).
   const nextSlot = upcoming[0] && upcoming[0].start === slot.end && !upcoming[0].external ? upcoming[0] : undefined;
   const nextSlotKey = nextSlot ? `${channelId}-${nextSlot.start}` : null;
   const early = play.key === slotKey && !!nextSlot && play.early === nextSlotKey ? nextSlot : undefined;
-  const episode = early ? early.episode : pick === 0 ? slot.episode : reserve[pick - 1];
-  const showing: LcSlot = { ...(early ?? slot), episode };
+  const item = lineup[pick] ?? lineup[0];
+  const episode = early ? early.episode : item.episode;
+  const showing: LcSlot = early ? early : { ...slot, series: item.series, episode };
   // El adelantado usa la clave que va a tener en su espacio: al llegar su horario no se vuelve a mostrar la placa.
   const playKey = early ? `${nextSlotKey}-0` : `${slotKey}-${pick}`;
 
   const handlePlaying = useCallback(() => setPlayingKey(playKey), [playKey]);
-  // Si el episodio no carga, se pasa otro de la misma serie (sin "Sin señal"): el de la grilla se reemplaza
-  // desde el mismo punto del espacio; uno de relleno, desde el principio.
+  // Si el episodio no carga, nunca "Sin señal": el servidor busca entre los que quedan (otro de la serie y, si
+  // su servidor de videos está caído, otras series del canal) uno que ande, mientras se ve la placa del canal.
+  // El de la grilla se reemplaza desde el mismo punto del espacio; uno de relleno, desde el principio.
+  // Si ninguno anda, tanda hasta el próximo programa (y se vuelve a probar en un rato).
+  const slotKeyRef = useRef(slotKey);
+  slotKeyRef.current = slotKey;
+  const searchingRef = useRef<string | null>(null);
   const handleUnavailable = useCallback(
     (id: string) => {
-      if (id !== episode.id) return;
+      // El reproductor puede avisar dos veces (sin fuentes y todas fallaron): se busca una sola vez.
+      if (id !== episode.id || searchingRef.current === playKey) return;
       if (early) {
         setPlay((p) => ({ ...p, earlyFailed: true }));
         setEndedKey(slotKey);
         return;
       }
-      if (pick >= reserve.length) return;
-      setPlay({ key: slotKey, pick: pick + 1, startAt: play.startAt === 0 && pick > 0 ? 0 : secondsIntoSlot(slot) });
+      const rest = lineup.slice(pick + 1).map((x) => x.episode.id);
+      if (rest.length === 0) {
+        setEndedKey(slotKey);
+        return;
+      }
+      searchingRef.current = playKey;
+      void findSignal(rest, id).then((found) => {
+        searchingRef.current = null;
+        if (slotKeyRef.current !== slotKey) return;
+        const next = found ? lineup.findIndex((x) => x.episode.id === found) : -1;
+        if (next < 0) {
+          setEndedKey(slotKey);
+          return;
+        }
+        setPlay({ key: slotKey, pick: next, startAt: play.startAt === 0 && pick > 0 ? 0 : secondsIntoSlot(slot) });
+      });
     },
-    [episode.id, early, pick, reserve.length, slotKey, slot, play.startAt],
+    [episode.id, early, pick, lineup, slotKey, playKey, slot, play.startAt],
   );
   // Al terminar, nunca una tanda larga: sigue otro capítulo de la serie o se adelanta el próximo programa.
   const handleEnded = useCallback(
@@ -389,23 +473,23 @@ function LiveTv({
       if (id !== episode.id) return;
       recordFinishedEpisode(showing.series.id, showing.series.name);
       const left = (slot.end - minutesNow(new Date())) * 60;
-      if (!early && pick < reserve.length && left > MIN_FILL_SECONDS) {
+      if (!early && pick + 1 < ownCount && left > MIN_FILL_SECONDS) {
         setPlay({ key: slotKey, pick: pick + 1, startAt: 0, follows: true });
       } else if (!early && nextSlotKey && left > SHORT_BREAK_SECONDS) {
         setPlay({ key: slotKey, pick, startAt: 0, early: nextSlotKey, follows: true });
-      } else if (!early && pick < reserve.length && left > SHORT_BREAK_SECONDS) {
+      } else if (!early && pick + 1 < ownCount && left > SHORT_BREAK_SECONDS) {
         setPlay({ key: slotKey, pick: pick + 1, startAt: 0, follows: true });
       } else {
         setEndedKey(slotKey);
       }
     },
-    [episode.id, early, pick, reserve.length, slot.end, showing.series.id, showing.series.name, slotKey, nextSlotKey],
+    [episode.id, early, pick, ownCount, slot.end, showing.series.id, showing.series.name, slotKey, nextSlotKey],
   );
 
   // Mientras se ve un capítulo se dejan listas las fuentes de lo que puede seguir (el de reserva y el próximo programa).
   const playingNow = playingKey === playKey;
   // Primero el que más seguro sigue (el de reserva): el addon busca de a una.
-  const followIds = [!early && pick < reserve.length ? reserve[pick].id : null, nextSlot && !early ? nextSlot.episode.id : null]
+  const followIds = [!early && pick + 1 < ownCount ? lineup[pick + 1].episode.id : null, nextSlot && !early ? nextSlot.episode.id : null]
     .filter(Boolean)
     .join(",");
   useEffect(() => {
@@ -424,6 +508,20 @@ function LiveTv({
     return () => window.clearTimeout(id);
   }, [playKey]);
   const showIdent = !slot.external && !inBreak && playingKey !== playKey && identExpiredKey !== playKey;
+  // Si después de la placa el video todavía no arrancó (el addon tarda o se está buscando otra señal), pasa
+  // la tanda como cuando en la tele "ya volvemos": nunca estática ni "Sin señal".
+  const searchingLong = !slot.external && !inBreak && playingKey !== playKey && identExpiredKey === playKey;
+
+  // Tanda porque nada tenía señal: en un rato se vuelve a probar (el servidor de videos puede haber vuelto).
+  const failedBreak = endedKey === slotKey && !slot.external && playingKey !== playKey;
+  useEffect(() => {
+    if (!failedBreak || (slot.end - minutesNow(new Date())) * 60 < MIN_FILL_SECONDS) return;
+    const id = window.setTimeout(() => {
+      setEndedKey(null);
+      setPlay({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
+    }, SIGNAL_RETRY_MS);
+    return () => window.clearTimeout(id);
+  }, [failedBreak, slot, slotKey]);
   // Al sintonizar la placa dice "Ahora"; de un capítulo a otro, "A continuación".
   const transition = !!play.follows;
   // El zócalo aparece cuando arranca cada episodio (en los externos, al sintonizar).
@@ -469,8 +567,8 @@ function LiveTv({
     <TvPlayer
       title={showing.series.name}
       subtitle={`${episodeLabel(episode)} · ${episode.title} · ${showing.block}`}
-      badge={inBreak || tandaNow ? "TANDA" : "EN VIVO"}
-      badgeColor={inBreak || tandaNow ? "#7c3aed" : "#ef4444"}
+      badge={inBreak || tandaNow || searchingLong ? "TANDA" : "EN VIVO"}
+      badgeColor={inBreak || tandaNow || searchingLong ? "#7c3aed" : "#ef4444"}
       overlay={
         <>
           <VideoPlayer
@@ -502,7 +600,7 @@ function LiveTv({
           {/* Corte con estática, como al cambiar de programa en la tele. */}
           {transition && <span key={`cut-${playKey}`} className="zap static-noise pointer-events-none absolute inset-0 z-30 bg-black" aria-hidden />}
           {showLowerThird && <LowerThird key={playKey} slot={showing} color={channel.color} ink={channel.ink} />}
-          {inBreak && <div className="absolute inset-0 z-20">{bumper}</div>}
+          {(inBreak || searchingLong) && <div className="absolute inset-0 z-20">{bumper}</div>}
         </>
       }
       cinema={cinema}

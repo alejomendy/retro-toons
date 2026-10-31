@@ -92,3 +92,13 @@ Los episodios a demanda de Pluto TV se reproducen en la página con `hls.js`. Pl
 - `scripts/` — `check-playable.mjs`, `prewarm.mjs`, `validate-channels.mjs`
 - `addon/` — imagen Docker del addon para Render
 - `.github/workflows/` — CI y tareas automáticas
+
+## Addons de Stremio
+
+La sección `/addons` permite explorar los catálogos declarados por tres addons externos: Cartoon Network, Springfield 3000 y SCPlus. La configuración de sus URLs está centralizada en `src/lib/stremio/addons.ts`.
+
+Los tres solo dan catálogo y fichas (no videos). Con eso la biblioteca suma categorías nuevas (`ADDON_COLLECTIONS`, cada una con su página en `/colecciones/:slug`): Sagas de Springfield, Películas animadas, el catálogo completo de Cartoon Network y Animación de los 80, 90 y 2000 (de los catálogos de animación por década de SCPlus). Cada título se cruza por nombre con LACartoons (`src/lib/stremio/client.ts`): si está, la tarjeta lleva directo a verlo; si no, a su ficha en `/addons/:addon/:tipo/:id`. Los episodios de las sagas de Springfield se enlazan con los de Los Simpsons (misma numeración) y Futurama (por título) en LACartoons. Los nombres del addon de Cartoon Network se completan en español con TMDB. Todo queda en caché un día.
+
+Las peticiones del navegador pasan por `/api/stremio/:addon/...`. El proxy solo acepta los tres identificadores configurados y reenvía las rutas del protocolo Stremio (`manifest`, `catalog`, `meta` y `stream`) al servidor correspondiente. Si un addon no declara catálogos o no ofrece streams, la interfaz lo informa sin afectar la biblioteca existente ni el addon de LACartoons.
+
+Los addons son servicios de terceros: su disponibilidad, contenido y enlaces de reproducción dependen de sus respectivos servidores. Los streams P2P (por ejemplo, `infoHash`) requieren un cliente compatible con Stremio y no se pueden reproducir directamente como una URL web.

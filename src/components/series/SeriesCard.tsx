@@ -26,15 +26,17 @@ interface Props {
   meta?: string;
   /** Etiquetas bajo el título (ej. canales). */
   badges?: React.ReactNode;
+  /** Destino de la tarjeta, si no es la serie de LACartoons (ej. la ficha de un addon). */
+  href?: string;
   children?: React.ReactNode;
 }
 
 /** Tarjeta de serie del catálogo, consistente en búsqueda, favoritos y "Continuar viendo". */
-export default function SeriesCard({ id, name, poster, meta, badges, children }: Props) {
+export default function SeriesCard({ id, name, poster, meta, badges, href, children }: Props) {
   return (
     <div className="chunky group relative flex h-full flex-col overflow-hidden rounded-xl bg-panel transition-transform focus-within:-translate-y-1 hover:-translate-y-1 motion-reduce:transition-none">
       <Link
-        href={seriesHref(id)}
+        href={href ?? seriesHref(id)}
         className="flex flex-1 flex-col outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-accent"
       >
         <SeriesPoster src={poster} name={name} sizes="(min-width: 1024px) 270px, (min-width: 640px) 30vw, 45vw" />

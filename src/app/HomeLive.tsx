@@ -121,7 +121,7 @@ function Screen({ item }: { item: OnAir }) {
       <>
         <div className="static-noise absolute inset-0 opacity-60" />
         <div className="absolute inset-0 grid place-items-center p-6 text-center">
-          <p className="rounded-lg bg-black/75 px-6 py-4 font-display text-xl text-white sm:text-3xl">Sin señal</p>
+          <p className="rounded-lg bg-black/75 px-6 py-4 font-display text-xl text-white sm:text-3xl">Sintonizando...</p>
         </div>
       </>
     );
@@ -186,7 +186,7 @@ export function OnAirChannels() {
                     <Loader2 className="size-4 animate-spin" /> Sintonizando…
                   </p>
                 ) : status === "error" || !current ? (
-                  <p className="font-mono text-lg text-white/65">Sin señal por ahora</p>
+                  <p className="font-mono text-lg text-white/65">Sintonizando…</p>
                 ) : (
                   <>
                     <p className="flex items-center gap-1.5 font-mono text-lg leading-none text-red-400">
