@@ -2,19 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CalendarClock, LayoutGrid, Library, Puzzle } from "lucide-react";
+import { CalendarClock, LayoutGrid, Library } from "lucide-react";
 
 const links = [
   { href: "/programacion", label: "Programación", short: "En vivo", icon: CalendarClock, live: true },
   { href: "/guia", label: "Guía", short: "Guía", icon: LayoutGrid, live: false },
   { href: "/biblioteca", label: "Biblioteca", short: "Biblioteca", icon: Library, live: false },
-  { href: "/addons", label: "Addons", short: "Addons", icon: Puzzle, live: false },
 ];
 
 function useActive() {
   const pathname = usePathname();
-  // Las colecciones salen de los addons: se marcan dentro de esa sección.
-  return (href: string) => pathname === href || pathname.startsWith(`${href}/`) || (href === "/addons" && pathname.startsWith("/colecciones"));
+  return (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 }
 
 /** Navegación del header (tablet y escritorio): marca la sección en la que estás. */
@@ -51,7 +49,7 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-30 border-t-4 border-black bg-accent pb-[env(safe-area-inset-bottom)] text-black sm:hidden"
       aria-label="Secciones"
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-3">
         {links.map(({ href, short, icon: Icon, live }) => {
           const active = isActive(href);
           return (

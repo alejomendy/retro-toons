@@ -4,17 +4,15 @@ import { getGenres } from "@/lib/lacartoons-schedule";
 import ContinueWatching from "@/components/series/ContinueWatching";
 import PageHeader, { SectionTitle } from "@/components/PageHeader";
 import BibliotecaClient from "./BibliotecaClient";
-import ExternalSeries, { ExternalSeriesSkeleton } from "./ExternalSeries";
-import AddonCollections, { AddonCollectionsSkeleton } from "./AddonCollections";
 import SurpriseButton from "@/components/series/SurpriseButton";
 import AchievementsSection from "@/components/series/AchievementsSection";
-import NetworkCatalog from "@/components/catalog/NetworkCatalog";
 
 export const metadata: Metadata = { title: "Biblioteca — RetroToons" };
 export const dynamic = "force-dynamic";
-// La sección de otras fuentes prueba qué series se pueden ver (con tope de 20 s).
+// El addon en el plan gratis de Render tarda hasta ~50 s en despertar.
 export const maxDuration = 60;
 
+/** Una sola biblioteca: todas las series (LACartoons, YouTube oficial y Pluto TV) con filtros por cadena. */
 export default async function BibliotecaPage() {
   // Cadenas reales declaradas por el addon (si no responde, no se muestran esos filtros).
   const genres = await getGenres();
@@ -24,20 +22,12 @@ export default async function BibliotecaPage() {
         Elegí cualquier serie y mirá el episodio que quieras, cuando quieras. Todo en español latino.
       </PageHeader>
       <ContinueWatching />
-      {/* Primero lo que se busca y se ve acá mismo; después las formas de descubrir más. */}
       <section className="space-y-5" aria-labelledby="todas-las-series">
         <SectionTitle id="todas-las-series">Todas las series</SectionTitle>
         <Suspense>
           <BibliotecaClient genres={genres} />
         </Suspense>
       </section>
-      <Suspense fallback={<AddonCollectionsSkeleton />}>
-        <AddonCollections />
-      </Suspense>
-      <NetworkCatalog />
-      <Suspense fallback={<ExternalSeriesSkeleton />}>
-        <ExternalSeries />
-      </Suspense>
       <AchievementsSection />
     </div>
   );

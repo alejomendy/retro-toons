@@ -3,8 +3,7 @@
 La tele de la tarde de los 90s y 2000s, en **español latino**: seis canales con programación semanal en vivo y una biblioteca para ver cualquier serie cuando quieras.
 
 - **Programación** (`/programacion`): Cartoon Network, Nickelodeon, Jetix, Disney, Warner Channel y FOX, cada uno con su grilla de lunes a viernes, especial del viernes y grillas propias de sábado y domingo. La tele pasa lo que está al aire desde el minuto que corresponde, con placa del canal, zócalo «Estás viendo», tanda con cuenta regresiva, control remoto (↑/↓, 1–6, deslizar en el celular) y modo cine estilo YouTube.
-- **Biblioteca** (`/biblioteca`): series de LACartoons con búsqueda, filtros por cadena, favoritos y «Continuar viendo»; después, las colecciones armadas con los addons y el explorador de Cartoon Network y Disney Channel (TMDB). Todo arranca en **Para ver ahora**: lo que se ve acá en español latino va primero y el resto queda como ficha. Cada episodio muestra su imagen de TMDB (también en series de cortos, donde TMDB cuenta cada segmento).
-- **Addons** (`/addons`): los catálogos de los addons de Stremio y sus colecciones (`/colecciones/:slug`). Ver [Addons de Stremio](#addons-de-stremio).
+- **Biblioteca** (`/biblioteca`): una sola biblioteca con todas las series (LACartoons, YouTube oficial y Pluto TV), búsqueda, filtros por cadena (Cartoon Network, Nickelodeon, Disney, Fox Kids, Warner Channel, Hanna Barbera, Marvel y Otros), favoritos y «Continuar viendo». Cada episodio muestra su imagen de TMDB (también en series de cortos, donde TMDB cuenta cada segmento).
 - **En el celular**, las secciones están en una barra de pestañas fija abajo y la tele de la programación queda arriba de todo.
 
 ```bash
@@ -51,10 +50,7 @@ Se pueden correr a mano desde la pestaña **Actions** → workflow → **Run wor
 | `GET /api/series/:episodeId/streams` | Fuentes del episodio → `{ success, streams }` |
 | `GET /api/programacion?canal=&fecha=YYYY-MM-DD` | Grilla del día → `{ success, canal, slots }` |
 | `GET /api/hls?url=` | Proxy de listas `.m3u8` de Pluto TV (CORS) |
-| `GET /api/catalog/networks?network=cartoon-network\|disney-channel&page=1` | Catálogo paginado de series por cadena (TMDB) |
-| `GET /api/catalog/series/:id` | Detalles, temporadas, avances y plataformas disponibles en TMDB |
 | `GET /api/catalog/series/:id/seasons/:season` | Episodios de una temporada con títulos en español cuando existen |
-| `GET /api/catalog/episode-video?...` | Busca un video embebible en canales permitidos por `YOUTUBE_CHANNEL_IDS` |
 
 Errores: `{ success: false, error, code }` con `code` en `ADDON_UNREACHABLE`, `ADDON_BAD_RESPONSE`, `INVALID_ID`, `SERIES_NOT_FOUND`, `NO_EPISODES`, `NO_STREAMS`, `MALFORMED_DATA`.
 
@@ -104,21 +100,3 @@ Desde Pluto (Latinoamérica, audio en español) se suman series que LACartoons n
 - `scripts/` — `check-playable.mjs`, `prewarm.mjs`, `validate-channels.mjs`
 - `addon/` — imagen Docker del addon para Render
 - `.github/workflows/` — CI y tareas automáticas
-
-## Catálogos Cartoon Network y Disney Channel
-
-La sección `/biblioteca` incluye un explorador por cadena basado en TMDB Discover TV: Cartoon Network (network ID `56`) y Disney Channel (network ID `54`). Arranca en **Para ver ahora**: solo los títulos que se pueden ver en RetroToons en español latino, cada uno con un enlace directo a su serie. **Todo el catálogo** muestra el resto como ficha (temporadas, episodios, avances y plataformas por región). La metadata se pide en `es-MX` y se mantiene la regla de no mostrar títulos de episodio en inglés.
-
-La disponibilidad sale de `src/lib/availability.ts`: cruza cada título (nombre latino y original) con las series de LACartoons que tienen video (`playable.json`) y con las series locales de YouTube oficial y Pluto TV. Tolera diferencias de escritura («Phineas y Pherb» ↔ «Phineas y Ferb») pero exige la misma primera palabra; si TMDB tiene varias versiones con el mismo nombre (reboots), queda la más vieja.
-
-Para buscar episodios en YouTube, la ruta `/api/catalog/episode-video` exige `YOUTUBE_API_KEY` y una lista explícita de canales en `YOUTUBE_CHANNEL_IDS`, y solo devuelve videos embebibles de esos canales.
-
-## Addons de Stremio
-
-La sección `/addons` permite explorar los catálogos de Cartoon Network, Springfield 3000, SCPlus y AnimVault. La configuración de sus URLs está centralizada en `src/lib/stremio/addons.ts`.
-
-Solo se usan su catálogo y sus fichas (no sus videos). Con eso la biblioteca suma categorías nuevas (`ADDON_COLLECTIONS`, cada una con su página en `/colecciones/:slug`): Sagas de Springfield, Películas animadas, el catálogo completo de Cartoon Network y Animación de los 80, 90 y 2000 (de los catálogos de animación por década de SCPlus). Cada título se cruza por nombre con LACartoons y las series locales (`src/lib/stremio/client.ts`): si está, la tarjeta lleva directo a verlo; si no, a su ficha en `/addons/:addon/:tipo/:id`. Los episodios de las sagas de Springfield se enlazan con los de Los Simpsons (misma numeración) y Futurama (por título) en LACartoons. Los nombres en inglés se completan en español con TMDB (por su id de TMDB en Cartoon Network y por su id de IMDb en AnimVault). Todo queda en caché un día.
-
-Las peticiones del navegador pasan por `/api/stremio/:addon/...`. El proxy solo acepta los identificadores configurados y reenvía las rutas del protocolo Stremio (`manifest`, `catalog`, `meta` y `stream`).
-
-La pestaña **Torrentio** busca el título en Cinemeta (proveedor auxiliar oculto) y lista las fuentes que devuelve Torrentio para la película o el episodio. Son torrents P2P: RetroToons no los reproduce (no hay cliente P2P ni Debrid); solo muestra la fuente HTTP/HLS directa si el addon la manda.

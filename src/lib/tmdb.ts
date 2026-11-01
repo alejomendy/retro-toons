@@ -150,75 +150,8 @@ export async function findTmdbArt(name: string, year?: number | null): Promise<{
   };
 }
 
-export interface TmdbImdbMatch {
-  tmdbId: number;
-  type: "series" | "movie";
-  name: string;
-  originalName: string;
-  overview: string | null;
-  poster: string | null;
-  backdrop: string | null;
-  year: number | null;
-}
-
-/** Ficha en español latino de un título a partir de su ID de IMDb (los addons de Stremio usan `tt...`). */
-export async function findByImdb(imdbId: string): Promise<TmdbImdbMatch | null> {
-  if (!/^tt\d{5,10}$/.test(imdbId)) return null;
-  type Hit = { id: number; name?: string; title?: string; original_name?: string; original_title?: string; overview?: string; poster_path: string | null; backdrop_path: string | null; first_air_date?: string; release_date?: string };
-  const res = await tmdb<{ tv_results: Hit[]; movie_results: Hit[] }>(`/find/${imdbId}`, { external_source: "imdb_id", language: LANG });
-  const tv = res?.tv_results[0];
-  const hit = tv ?? res?.movie_results[0];
-  if (!hit) return null;
-  const date = hit.first_air_date || hit.release_date;
-  return {
-    tmdbId: hit.id,
-    type: tv ? "series" : "movie",
-    name: hit.name || hit.title || "",
-    originalName: hit.original_name || hit.original_title || "",
-    overview: hit.overview?.trim() || null,
-    poster: hit.poster_path ? `${IMG}/w342${hit.poster_path}` : null,
-    backdrop: hit.backdrop_path ? `${IMG}/w1280${hit.backdrop_path}` : null,
-    year: date ? Number(date.slice(0, 4)) : null,
-  };
-}
-
 export async function findTmdbId(originalTitle: string, year: number): Promise<number | null> {
   return (await findTmdb(originalTitle, year))?.id ?? null;
-}
-
-export interface TmdbTitle {
-  name: string;
-  originalName: string;
-  overview: string | null;
-  poster: string | null;
-  backdrop: string | null;
-  year: string | null;
-}
-
-/** Nombre en español, sinopsis y arte de una serie o película por su id de TMDB (para los catálogos de los addons). */
-export async function getTmdbTitle(kind: "tv" | "movie", id: number): Promise<TmdbTitle | null> {
-  const raw = await tmdb<{
-    name?: string;
-    title?: string;
-    original_name?: string;
-    original_title?: string;
-    overview?: string;
-    poster_path: string | null;
-    backdrop_path: string | null;
-    first_air_date?: string;
-    release_date?: string;
-  }>(`/${kind}/${id}`, { language: LANG });
-  const name = raw?.name ?? raw?.title;
-  if (!raw || !name) return null;
-  const date = raw.first_air_date || raw.release_date;
-  return {
-    name,
-    originalName: raw.original_name ?? raw.original_title ?? name,
-    overview: raw.overview || null,
-    poster: raw.poster_path ? `${IMG}/w342${raw.poster_path}` : null,
-    backdrop: raw.backdrop_path ? `${IMG}/w1280${raw.backdrop_path}` : null,
-    year: date ? date.slice(0, 4) : null,
-  };
 }
 
 export async function getTmdbShow(id: number): Promise<TmdbShow | null> {

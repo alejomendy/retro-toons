@@ -61,11 +61,8 @@ const fullCatalog = unstable_cache(
 /** Serie con su arte, en caché un día (la usan la grilla, las páginas de la serie y la API). */
 export const cachedSeries = unstable_cache(async (id: string) => withArtwork(await fetchSeries(id)), ["lacartoons-series-art"], { revalidate: CACHE_SECONDS });
 
-/** Todo el catálogo de LACartoons (en caché un día). */
-export const getFullCatalog = () => fullCatalog();
-
 /** Para comparar nombres: sin tildes, signos ni palabras de relleno ("La Serie Animada", "El", "Las"...). */
-export function normalize(name: string): string {
+function normalize(name: string): string {
   return name
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
@@ -89,21 +86,6 @@ function findByName(names: string[], catalog: { series: LcSeriesSummary; key: st
     .filter((c) => c.key.length >= 4 && keys.some((k) => wordKey(c.key).includes(wordKey(k)) || wordKey(k).includes(wordKey(c.key))))
     .sort((a, b) => a.key.length - b.key.length);
   return partial[0]?.series;
-}
-
-/**
- * Buscador de series de LACartoons por nombre sobre el catálogo en caché (lo usan los addons de
- * Stremio para saber qué títulos se pueden ver acá). Con `exact`, sin coincidencias parciales.
- * Si el addon no responde, no encuentra nada.
- */
-export async function catalogMatcher(): Promise<(names: string[], exact?: boolean) => LcSeriesSummary | undefined> {
-  const list = await fullCatalog().catch((): LcSeriesSummary[] => []);
-  const catalog = list.map((series) => ({ series, key: normalize(series.name) }));
-  return (names, exact) => {
-    if (!exact) return findByName(names, catalog);
-    const keys = names.map(normalize).filter((k) => k.length >= 3);
-    return catalog.find((c) => keys.includes(c.key))?.series;
-  };
 }
 
 /** Generador pseudoaleatorio con semilla (mulberry32): mismo día, mismo resultado. */
@@ -140,7 +122,7 @@ const unique = <T,>(list: T[]) => [...new Set(list)];
  * scripts/check-playable.mjs una vez por semana. Nunca se consulta al addon durante una visita:
  * eso lo saturaba y hacía que la grilla cambiara al recargar. Series sin dato: se asume que sí.
  */
-export function isPlayable(series: Pick<LcSeries, "id">): boolean {
+function isPlayable(series: Pick<LcSeries, "id">): boolean {
   return (playableList.series as Record<string, { playable: boolean } | undefined>)[series.id]?.playable !== false;
 }
 
@@ -241,7 +223,10 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
         const show = showById[key.slice(EXTERNAL.length)];
         // Episodios cortos (segmentos de 7-11 min) dejarían casi todo el espacio en tanda.
         if (show.episodeMinutes < MIN_EXTERNAL_MINUTES) return;
-        const numbers = await getAvailableEpisodes(show).catch(() => []);
+        const numbers = await getAvailableEpisodes(show).catch((): number[] => {
+        failed++;
+        return [];
+      });
         if (numbers.length > 0) external.set(key, { show, numbers });
       }),
   );
@@ -369,8 +354,16 @@ export interface ExternalSeries {
  * pero sí tienen episodios en fuentes legales propias (canales oficiales de YouTube, Pluto TV).
  * Se muestran en la biblioteca y se abren en /biblioteca/<id local>.
  */
+/** La lista salió incompleta (alguna fuente no respondió): se usa, pero no se guarda en caché. */
+class IncompleteExternalSeries extends Error {
+  constructor(readonly series: ExternalSeries[]) {
+    super("Lista de otras fuentes incompleta");
+  }
+}
+
 export async function getExternalSeries(): Promise<ExternalSeries[]> {
   const catalog = (await fullCatalog()).map((series) => ({ series, key: normalize(series.name) }));
+  let failed = 0;
 
   const candidates = await Promise.all(
     Object.values(showById).map(async (show) => {
@@ -386,12 +379,54 @@ export async function getExternalSeries(): Promise<ExternalSeries[]> {
   );
   const shows = candidates.filter((s): s is Show => !!s);
   const posters = await getPosters(shows).catch((): Record<string, string> => ({}));
-  return shows
-    .map((s) => ({ id: s.id, name: s.title, poster: posters[s.id] ?? null, year: s.year }))
-    .sort((a, b) => a.name.localeCompare(b.name, "es"));
+  const list = shows.map((s) => ({ id: s.id, name: s.title, poster: posters[s.id] ?? null, year: s.year })).sort((a, b) => a.name.localeCompare(b.name, "es"));
+  if (failed > 0) throw new IncompleteExternalSeries(list);
+  return list;
 }
 
 const PAGE_SIZE = 20;
+
+/** Cadena de la biblioteca para cada canal de la programación (Jetix heredó a Fox Kids; FOX va a «Otros»). */
+const GENRE_BY_CHANNEL: Record<ChannelId, string> = {
+  "cartoon-network": "Cartoon Network",
+  nickelodeon: "Nickelodeon",
+  jetix: "Fox Kids",
+  disney: "Disney",
+  warner: "Warner Channel",
+  fox: "Otros",
+};
+/** Lo que se espera a la lista de series de otras fuentes antes de mostrar la biblioteca sin ellas (en frío). */
+const EXTERNAL_WAIT_MS = 3000;
+
+/** Series de YouTube oficial y Pluto TV: armar la lista prueba cada fuente, así que va en su propia caché. */
+const cachedExternalSeries = unstable_cache(() => getExternalSeries(), ["retrotoons-external-series-v2"], { revalidate: CACHE_SECONDS / 2 });
+
+/**
+ * Una sola biblioteca: el catálogo de LACartoons más las series de otras fuentes, cada una en la
+ * cadena de su canal, en orden alfabético. En frío no se espera a las de otras fuentes: esa visita
+ * sale sin ellas y la próxima ya las tiene.
+ */
+/** Última lista conocida (aunque esté incompleta): se muestra mientras se completa la de la caché. */
+let lastExternal: ExternalSeries[] = [];
+
+async function libraryCatalog(): Promise<LcSeriesSummary[]> {
+  const pending = cachedExternalSeries()
+    .then((list) => (lastExternal = list))
+    .catch((e): ExternalSeries[] => {
+      // Incompleta: no queda en caché (la próxima visita reintenta las que fallaron) pero suma lo que encontró.
+      if (e instanceof IncompleteExternalSeries && e.series.length >= lastExternal.length) lastExternal = e.series;
+      return lastExternal;
+    });
+  const [lc, external] = await Promise.all([
+    fullCatalog(),
+    Promise.race([pending, new Promise<ExternalSeries[]>((resolve) => setTimeout(() => resolve(lastExternal), EXTERNAL_WAIT_MS))]),
+  ]);
+  const extra = external.map((s): LcSeriesSummary => {
+    const genres = unique((showById[s.id]?.channels ?? []).map((c) => GENRE_BY_CHANNEL[c]));
+    return { id: s.id, name: s.name, poster: s.poster, genres: genres.length > 0 ? genres : ["Otros"] };
+  });
+  return [...lc, ...extra].sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
 
 /**
  * Búsqueda y exploración sobre el catálogo en caché (24 h) en vez de consultar al addon en cada
@@ -399,7 +434,7 @@ const PAGE_SIZE = 20;
  * que coincide; sin búsqueda, páginas de 20 como el addon.
  */
 export async function searchCachedCatalog({ search, genre, skip = 0 }: { search?: string; genre?: string; skip?: number }): Promise<LcSeriesSummary[]> {
-  let list = await fullCatalog();
+  let list = await libraryCatalog();
   if (genre) list = list.filter((s) => s.genres.includes(genre));
   if (search) {
     const words = normalize(search).split(" ").filter(Boolean);

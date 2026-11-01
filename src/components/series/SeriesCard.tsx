@@ -26,17 +26,13 @@ interface Props {
   meta?: string;
   /** Etiquetas bajo el título (ej. canales). */
   badges?: React.ReactNode;
-  /** Destino de la tarjeta, si no es la serie de LACartoons (ej. la ficha de un addon). */
+  /** Destino de la tarjeta, si no es la página de la serie. */
   href?: string;
-  /** En lugar de navegar, abre algo en la misma página (ej. la ficha de una serie que todavía no se puede ver). */
-  onSelect?: () => void;
-  /** Atenuada: todavía no se puede ver en RetroToons. */
-  muted?: boolean;
   children?: React.ReactNode;
 }
 
 /** Tarjeta de serie del catálogo, consistente en búsqueda, favoritos y "Continuar viendo". */
-export default function SeriesCard({ id, name, poster, meta, badges, href, onSelect, muted = false, children }: Props) {
+export default function SeriesCard({ id, name, poster, meta, badges, href, children }: Props) {
   const inner = (
     <>
       <SeriesPoster src={poster} name={name} sizes="(min-width: 1024px) 270px, (min-width: 640px) 30vw, 45vw" />
@@ -47,22 +43,11 @@ export default function SeriesCard({ id, name, poster, meta, badges, href, onSel
       </div>
     </>
   );
-  const linkClass = "flex flex-1 flex-col text-left outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-accent";
   return (
-    <div
-      className={`chunky group relative flex h-full flex-col overflow-hidden rounded-xl bg-panel transition-transform focus-within:-translate-y-1 hover:-translate-y-1 motion-reduce:transition-none ${
-        muted ? "opacity-75 hover:opacity-100 focus-within:opacity-100" : ""
-      }`}
-    >
-      {onSelect ? (
-        <button type="button" onClick={onSelect} className={linkClass}>
-          {inner}
-        </button>
-      ) : (
-        <Link href={href ?? seriesHref(id)} className={linkClass}>
-          {inner}
-        </Link>
-      )}
+    <div className="chunky group relative flex h-full flex-col overflow-hidden rounded-xl bg-panel transition-transform focus-within:-translate-y-1 hover:-translate-y-1 motion-reduce:transition-none">
+      <Link href={href ?? seriesHref(id)} className="flex flex-1 flex-col outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-accent">
+        {inner}
+      </Link>
       {children}
     </div>
   );
