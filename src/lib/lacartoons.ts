@@ -212,10 +212,32 @@ export async function fetchSeries(id: string): Promise<LcSeries> {
   };
 }
 
+/**
+ * Freno: el addon busca los videos de a uno (un solo Chromium). Si varias búsquedas seguidas no responden,
+ * está colgado o saturado, y mandarle más solo alarga la cola: durante un minuto se responde "no disponible"
+ * al toque (la tele sigue con la placa del canal y reintenta más tarde).
+ */
+const STREAM_FAILURES_TO_PAUSE = 3;
+const STREAM_PAUSE_MS = 60_000;
+let streamFailures = 0;
+let streamsPausedUntil = 0;
+
 export async function fetchStreams(episodeId: string): Promise<LcStream[]> {
   if (!isValidEpisodeId(episodeId)) throw new LcError("INVALID_ID");
+  if (Date.now() < streamsPausedUntil) throw new LcError("ADDON_UNREACHABLE", "El servidor de videos está saturado. Probá de nuevo en un minuto.");
   // El addon busca las fuentes en el momento: con episodios sin video puede tardar más de 20 s.
-  const data = await addonGet(`/stream/series/${encodeURIComponent(episodeId)}.json`, 45000);
+  let data: unknown;
+  try {
+    data = await addonGet(`/stream/series/${encodeURIComponent(episodeId)}.json`, 45000);
+    streamFailures = 0;
+  } catch (error) {
+    if (error instanceof LcError && error.code === "ADDON_UNREACHABLE" && ++streamFailures >= STREAM_FAILURES_TO_PAUSE) {
+      streamFailures = 0;
+      streamsPausedUntil = Date.now() + STREAM_PAUSE_MS;
+      console.error(`LACartoons: ${STREAM_FAILURES_TO_PAUSE} búsquedas de video sin respuesta; pausa de ${STREAM_PAUSE_MS / 1000} s`);
+    }
+    throw error;
+  }
   if (!isObj(data) || !Array.isArray(data.streams)) throw new LcError("MALFORMED_DATA");
   const streams = data.streams.map(parseStream).filter((s): s is LcStream => !!s);
   // Primero las que el navegador puede reproducir tal cual (ej. el proxy del addon). Las directas de ok.ru

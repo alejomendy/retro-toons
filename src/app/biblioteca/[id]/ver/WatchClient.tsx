@@ -87,11 +87,12 @@ export default function WatchClient({ series, videos, index, startAt, autoPlay, 
     [episode.id, upNext],
   );
 
-  // Mientras se ve un episodio, se dejan listas las fuentes del siguiente.
+  // Mientras se ve un episodio, se dejan listas las fuentes del siguiente: así nunca hay que esperarlo.
+  // La precarga hace fila detrás del episodio actual (lib/prefetch-streams), así que no lo demora.
   const upNextId = upNext?.id;
   useEffect(() => {
     if (!upNextId) return;
-    const timer = window.setTimeout(() => prefetchStreams(upNextId), 15_000);
+    const timer = window.setTimeout(() => prefetchStreams(upNextId, { next: true }), 3_000);
     return () => window.clearTimeout(timer);
   }, [upNextId]);
 

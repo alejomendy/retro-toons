@@ -19,7 +19,7 @@ Necesita el addon de LACartoons corriendo (ver [Addon](#addon-de-lacartoons)). E
 - **Canales y bloques:** `src/data/channels.ts`. Cada bloque tiene horario, días (`days`, 0 = domingo) y series por su nombre en LACartoons (`lacartoons`); opcionalmente series locales (`shows`, de `src/data/shows.ts`) que se ven desde otra fuente legal si LACartoons no las tiene. `exclusive: true` es una maratón (solo sus series). Los bloques de cada día tienen que cubrir las 24 hs: lo revisa `node scripts/validate-channels.mjs` (y el CI).
 - **Grilla determinística y semanal:** misma fecha + mismo canal = misma grilla para todos (`src/lib/lacartoons-schedule.ts`), guardada en caché por día. Cada franja mantiene el orden de sus series toda la semana (como en la tele) y los episodios avanzan cada día; la semana siguiente se renueva.
 - **Solo series con video:** `src/data/playable.json` dice qué series tienen video reproducible. Lo arma `scripts/check-playable.mjs` revisando de a una serie (lo corre una Action cada lunes). La grilla nunca consulta al addon durante una visita.
-- **En vivo:** cada espacio trae episodios de reserva de la misma serie (`slot.more`). Si el del espacio no carga, la tele pasa otro desde el mismo punto; si termina con tiempo para otro igual de largo (cortos), sigue con el próximo; si no, tanda hasta el siguiente programa. El cambio de programa se agenda a la hora exacta.
+- **En vivo:** cada espacio trae episodios de reserva de la misma serie (`slot.more`). Si el del espacio no carga, la tele pasa otro de la misma serie desde el mismo punto (nunca otra serie: la grilla dice qué está al aire); si ninguno tiene señal, queda la placa del canal reintentando (30 s, 1, 2, 4 y hasta 5 min), nunca la tanda. Si el episodio termina con tiempo para otro, sigue con el próximo de la serie; si no, se adelanta el próximo programa. Apenas arranca un episodio se precarga lo que sigue (el de reserva y el próximo programa), antes que cualquier otra precarga. El cambio de programa se agenda a la hora exacta.
 - **Series de otras fuentes:** las icónicas que LACartoons no tiene (o tiene sin video) salen de los canales oficiales de YouTube o de Pluto TV si tienen episodios ahí (`src/lib/catalog.ts`); se reproducen con el embed de la fuente.
 
 ## Addon de LACartoons
@@ -36,7 +36,7 @@ El catálogo y los videos salen del addon de Stremio [stremio-lacartoons](https:
 | --- | --- | --- |
 | `ci.yml` | cada push y PR | tipos, lint y validación de la programación |
 | `prewarm.yml` | cada 30 min (:20 y :50) | pide las fuentes del programa actual y el siguiente de cada canal, así la tele arranca al instante |
-| `keep-addon-awake.yml` | cada 10 min | mantiene despierto el addon de Render; si no responde tras varios intentos el workflow falla y GitHub avisa por mail |
+| `keep-addon-awake.yml` | cada 10 min | mantiene despierto el addon de Render y revisa que la búsqueda de videos responda: si está colgada, reinicia el servicio (secrets `RENDER_API_KEY` + `RENDER_SERVICE_ID`, o `RENDER_DEPLOY_HOOK_URL`); si no hay credenciales, falla y GitHub avisa por mail |
 | `check-playable.yml` | lunes 03:00 (Argentina) | actualiza `src/data/playable.json` y lo commitea (Vercel redespliega) |
 
 Se pueden correr a mano desde la pestaña **Actions** → workflow → **Run workflow**.

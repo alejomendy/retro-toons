@@ -110,7 +110,7 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
   const nextUp = upcoming[0];
   const nextSoon = !!nextUp && !nextUp.external && nextUp.start - nowMin <= 5;
   useEffect(() => {
-    if (nextSoon && nextUp) prefetchStreams(nextUp.episode.id);
+    if (nextSoon && nextUp) prefetchStreams(nextUp.episode.id, { next: true });
   }, [nextSoon, nextUp]);
   // El modo cine se guarda acá para que no se apague cuando cambia el programa.
   const [cinema, setCinema] = useTheaterMode();
@@ -143,8 +143,8 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
     .join(",");
   useEffect(() => {
     if (!neighborEpisodes) return;
-    // Un rato después de sintonizar, para no competir con la carga del canal actual.
-    const id = window.setTimeout(() => neighborEpisodes.split(",").forEach(prefetchStreams), 8000);
+    // Después de lo que sigue en este canal (que se pide a los 5 s de arrancar): los vecinos van atrás en la fila.
+    const id = window.setTimeout(() => neighborEpisodes.split(",").forEach((id) => prefetchStreams(id)), 20_000);
     return () => window.clearTimeout(id);
   }, [neighborEpisodes]);
 
@@ -179,7 +179,7 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
           {/* Deslizar el dedo sobre la tele cambia de canal, como el control remoto. */}
           <div onTouchStart={remote.onTouchStart} onTouchEnd={remote.onTouchEnd}>
             {current && now ? (
-              <LiveTv slot={current} now={now} upcoming={upcoming} daySlots={slots} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
+              <LiveTv slot={current} now={now} upcoming={upcoming} channelId={channelId} cinema={cinema} onCinemaChange={setCinema} />
             ) : (
               <TvPlayer
                 title="Sintonizando..."
@@ -337,38 +337,30 @@ const IDENT_MAX_MS = 15_000;
 const MIN_FILL_SECONDS = 180;
 /** Con tan poco tiempo restante alcanza con una tanda corta hasta el próximo programa. */
 const SHORT_BREAK_SECONDS = 15;
-/** Un rato después de arrancar el capítulo se dejan listas las fuentes de lo que puede seguir. */
-const PREFETCH_NEXT_MS = 30_000;
+/**
+ * Apenas arranca el capítulo se dejan listas las fuentes de lo que sigue (el de reserva y el próximo
+ * programa): así el siguiente nunca espera al servidor de videos. Unos segundos de margen para que el
+ * video tome velocidad primero.
+ */
+const PREFETCH_NEXT_MS = 5_000;
 /** Si la grilla no llegó, se vuelve a pedir pasado este tiempo. */
 const GRID_RETRY_MS = 15_000;
-/** Si nada del espacio tenía señal, se vuelve a probar pasado este tiempo (con la placa del canal, no la tanda). */
+/**
+ * Si nada del espacio tenía señal, se vuelve a probar (con la placa del canal, no la tanda): a los 30 s y
+ * después cada vez más espaciado, hasta 5 min. Con el servidor de videos colgado, reintentar seguido de
+ * todas las pestañas abiertas solo le suma cola.
+ */
 const SIGNAL_RETRY_MS = 30_000;
-/** Series de otros horarios del canal que la tele puede pasar si la del espacio no tiene señal. */
-const RESCUE_SERIES = 8;
-
+const SIGNAL_RETRY_MAX_MS = 5 * 60_000;
 type LineupItem = { series: LcSlot["series"]; episode: LcSlot["episode"] };
 
 /**
- * Lo que la tele puede pasar en un espacio, en orden: el episodio de la grilla, los de reserva de la
- * misma serie y, por si el servidor de videos de esa serie está caído, otras series del canal.
- * Primero la repetición de lo que pasó en las horas anteriores (sus fuentes ya están en caché, así
- * que arranca al instante) y después series de más tarde (con su último episodio de reserva, para
- * no adelantar el que pasan en su horario). Nunca el próximo programa.
+ * Lo que la tele puede pasar en un espacio, en orden: el episodio de la grilla y los de reserva de la
+ * misma serie. Nunca otra serie: la grilla y el zócalo dicen qué programa está al aire, y si ninguno de
+ * sus episodios tiene señal queda la placa del canal reintentando.
  */
-function buildLineup(slot: LcSlot, daySlots: LcSlot[]): LineupItem[] {
-  const own = [slot.episode, ...(slot.more ?? [])].map((episode) => ({ series: slot.series, episode }));
-  const i = daySlots.findIndex((s) => s.start === slot.start);
-  const before = i < 0 ? [] : daySlots.slice(0, i).reverse().map((s) => ({ s, episode: s.episode }));
-  const after = (i < 0 ? daySlots : daySlots.slice(i + 2)).map((s) => ({ s, episode: s.more?.at(-1) ?? s.episode }));
-  const seen = new Set([slot.series.id]);
-  const rescue: LineupItem[] = [];
-  for (const { s, episode } of [...before, ...after]) {
-    if (rescue.length >= RESCUE_SERIES) break;
-    if (s.external || seen.has(s.series.id)) continue;
-    seen.add(s.series.id);
-    rescue.push({ series: s.series, episode });
-  }
-  return [...own, ...rescue];
+function buildLineup(slot: LcSlot): LineupItem[] {
+  return [slot.episode, ...(slot.more ?? [])].map((episode) => ({ series: slot.series, episode }));
 }
 
 /** Vueltas de búsqueda (de hasta ~45 s cada una) antes de rendirse y pasar la tanda. */
@@ -416,7 +408,6 @@ function LiveTv({
   slot,
   now,
   upcoming,
-  daySlots,
   channelId,
   cinema,
   onCinemaChange,
@@ -424,8 +415,6 @@ function LiveTv({
   slot: LcSlot;
   now: Date;
   upcoming: LcSlot[];
-  /** Toda la grilla del día del canal (de ahí salen otras series si la del espacio no tiene señal). */
-  daySlots: LcSlot[];
   channelId: ChannelId;
   cinema: boolean;
   onCinemaChange: (cinema: boolean) => void;
@@ -443,8 +432,8 @@ function LiveTv({
     const carry = play.early === slotKey && !play.earlyFailed;
     setPlay(carry ? { key: slotKey, pick: 0, startAt: play.startAt, follows: true } : { key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
   }
-  const lineup = useMemo(() => buildLineup(slot, daySlots), [slot, daySlots]);
-  // Los de la misma serie (el de la grilla + slot.more); después vienen los de otras series del canal.
+  const lineup = useMemo(() => buildLineup(slot), [slot]);
+  // Episodios de la serie del espacio: el de la grilla + los de reserva (slot.more).
   const ownCount = 1 + (slot.more?.length ?? 0);
   const pick = play.key === slotKey ? play.pick : 0;
   // El próximo programa, si empieza justo cuando termina este (para adelantarlo).
@@ -459,10 +448,9 @@ function LiveTv({
   const playKey = early ? `${nextSlotKey}-0` : `${slotKey}-${pick}`;
 
   const handlePlaying = useCallback(() => setPlayingKey(playKey), [playKey]);
-  // Si el episodio no carga, nunca "Sin señal": el servidor busca entre los que quedan (otro de la serie y, si
-  // su servidor de videos está caído, otras series del canal) uno que ande, mientras se ve la placa del canal.
-  // El de la grilla se reemplaza desde el mismo punto del espacio; uno de relleno, desde el principio.
-  // Si ninguno anda, tanda hasta el próximo programa (y se vuelve a probar en un rato).
+  // Si el episodio no carga, nunca "Sin señal": el servidor busca otro episodio de la misma serie que ande,
+  // mientras se ve la placa del canal. El de la grilla se reemplaza desde el mismo punto del espacio; uno de
+  // reserva, desde el principio. Si ninguno anda, la placa queda reintentando (no la tanda).
   const slotKeyRef = useRef(slotKey);
   slotKeyRef.current = slotKey;
   const searchingRef = useRef<string | null>(null);
@@ -521,7 +509,7 @@ function LiveTv({
     .join(",");
   useEffect(() => {
     if (!playingNow || !followIds) return;
-    const id = window.setTimeout(() => followIds.split(",").forEach(prefetchStreams), PREFETCH_NEXT_MS);
+    const id = window.setTimeout(() => followIds.split(",").forEach((id) => prefetchStreams(id, { next: true })), PREFETCH_NEXT_MS);
     return () => window.clearTimeout(id);
   }, [playingNow, followIds]);
 
@@ -550,12 +538,20 @@ function LiveTv({
   const identStatus = noSignal ? "retrying" : identExpiredKey === playKey ? "slow" : "tuning";
 
   // Nada tenía señal: se vuelve a probar en un rato (el servidor de videos puede haber vuelto).
+  // Los reintentos se cuentan por canal (no por espacio): si el servidor sigue caído al cambiar de programa,
+  // no se vuelve a empezar de 30 s. Se reinician cuando un episodio arranca.
+  const retriesRef = useRef(0);
+  useEffect(() => {
+    if (playingKey === playKey) retriesRef.current = 0;
+  }, [playingKey, playKey]);
   useEffect(() => {
     if (!noSignal || (slot.end - minutesNow(new Date())) * 60 < MIN_FILL_SECONDS) return;
+    const wait = Math.min(SIGNAL_RETRY_MS * 2 ** retriesRef.current, SIGNAL_RETRY_MAX_MS);
     const id = window.setTimeout(() => {
+      retriesRef.current += 1;
       setEndedKey(null);
       setPlay({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
-    }, SIGNAL_RETRY_MS);
+    }, wait);
     return () => window.clearTimeout(id);
   }, [noSignal, slot, slotKey]);
   // Al sintonizar la placa dice "Ahora"; de un capítulo a otro, "A continuación".

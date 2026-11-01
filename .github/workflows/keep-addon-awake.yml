@@ -1,6 +1,11 @@
 # El plan gratis de Render duerme el addon tras 15 min sin uso y despertarlo tarda ~1 min
 # (la tele muestra "Sin señal" mientras tanto). Este ping cada 10 min lo mantiene despierto.
 # Un solo servicio despierto todo el mes entra en las 750 horas gratis de Render.
+#
+# Además revisa que la búsqueda de videos ande: a veces el Chromium del addon se cuelga y el manifiesto
+# sigue respondiendo, pero ningún episodio carga. Si pasa, reinicia el servicio solo. Necesita UNO de:
+#   - secrets RENDER_API_KEY + RENDER_SERVICE_ID (reinicio rápido, sin volver a construir la imagen), o
+#   - secret RENDER_DEPLOY_HOOK_URL (Settings → Deploy Hook del servicio; vuelve a desplegar, tarda más).
 name: Mantener despierto el addon
 
 on:
@@ -11,13 +16,13 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 12
+    env:
+      ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv-addon.onrender.com' }}
     steps:
       # Si después de 3 intentos (un minuto entre cada uno) el addon no responde, el workflow
       # falla a propósito: GitHub manda un mail cuando falla una tarea programada.
       - name: Ping al manifiesto del addon
-        env:
-          ADDON_URL: ${{ vars.LACARTOONS_ADDON_URL || 'https://retrotoons-tv-addon.onrender.com' }}
         run: |
           for attempt in 1 2 3; do
             if curl -fsS --max-time 90 -o /dev/null -w "Intento $attempt: %{http_code} en %{time_total}s\n" "$ADDON_URL/manifest.json"; then
@@ -28,3 +33,36 @@ jobs:
           done
           echo "::error::El addon de LACartoons ($ADDON_URL) no responde. Revisá el servicio en Render."
           exit 1
+
+      # Un episodio que siempre tuvo video (Coraje T1E1): la respuesta puede venir vacía, pero tiene que venir.
+      # Dos intentos de hasta 100 s (el addon busca de a un episodio y puede estar ocupado con otro).
+      - name: Revisar que la búsqueda de videos responda
+        id: streams
+        run: |
+          for attempt in 1 2; do
+            if curl -fsS --max-time 100 -o /dev/null -w "Intento $attempt: %{http_code} en %{time_total}s\n" "$ADDON_URL/stream/series/lacart_5%3A1%3A1.json"; then
+              echo "colgado=no" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Intento $attempt: la búsqueda de videos no respondió."
+            [ "$attempt" -lt 2 ] && sleep 30
+          done
+          echo "colgado=si" >> "$GITHUB_OUTPUT"
+
+      - name: Reiniciar el addon colgado
+        if: steps.streams.outputs.colgado == 'si'
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -n "$RENDER_API_KEY" ] && [ -n "$RENDER_SERVICE_ID" ]; then
+            curl -fsS -X POST -H "Authorization: Bearer $RENDER_API_KEY" "https://api.render.com/v1/services/$RENDER_SERVICE_ID/restart"
+            echo "::warning::La búsqueda de videos del addon estaba colgada: se reinició el servicio."
+          elif [ -n "$RENDER_DEPLOY_HOOK_URL" ]; then
+            curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL"
+            echo "::warning::La búsqueda de videos del addon estaba colgada: se volvió a desplegar el servicio."
+          else
+            echo "::error::La búsqueda de videos del addon está colgada y no hay credenciales de Render para reiniciarlo. Reinicialo a mano en Render."
+            exit 1
+          fi

@@ -6,7 +6,7 @@
  * respuesta en vez de volver a esperar al addon, que tarda entre 5 y 30 s en buscarlas.
  *
  * El addon busca las fuentes de a una por vez (Chromium en 512 MB). Por eso los pedidos de antemano
- * van en fila, de a uno, y solo se guardan los últimos: pasar el mouse por una lista de 20 episodios
+ * van en fila, de a uno, y solo se guardan los últimos 4: pasar el mouse por una lista de 20 episodios
  * no puede dejar al que elegiste esperando detrás de los otros 19.
  */
 export interface StreamsResponse {
@@ -17,10 +17,12 @@ export interface StreamsResponse {
 /** Las respuestas buenas se reusan un rato; los errores se vuelven a pedir. */
 const KEEP_MS = 30 * 60 * 1000;
 /** Pedidos de antemano que esperan turno (los más viejos se descartan). */
-const MAX_QUEUED = 2;
+const MAX_QUEUED = 4;
 
 const cache = new Map<string, { at: number; promise: Promise<StreamsResponse> }>();
 let queue: string[] = [];
+/** Lo que viene a continuación de lo que se está viendo: se pide antes que cualquier otra precarga. */
+let preferred: string[] = [];
 let prefetching = false;
 /** Pedidos que alguien está esperando de verdad (el reproductor): mientras haya, no se adelanta nada. */
 let watching = 0;
@@ -49,6 +51,7 @@ function request(episodeId: string, priority: "high" | "low"): Promise<StreamsRe
 /** Las fuentes de un episodio que se va a reproducir ahora: pasa adelante de los pedidos de antemano. */
 export function getStreams(episodeId: string): Promise<StreamsResponse> {
   queue = [];
+  preferred = [];
   watching++;
   const promise = cached(episodeId) ?? request(episodeId, "high");
   const done = () => {
@@ -61,7 +64,7 @@ export function getStreams(episodeId: string): Promise<StreamsResponse> {
 
 function pump(): void {
   if (prefetching || watching > 0) return;
-  const next = queue.pop();
+  const next = preferred.shift() ?? queue.pop();
   if (!next) return;
   if (cached(next)) return pump();
   prefetching = true;
@@ -72,10 +75,19 @@ function pump(): void {
   request(next, "low").then(done, done);
 }
 
-/** Pide las fuentes en segundo plano, sin esperar la respuesta (en fila, de a una). */
-export function prefetchStreams(episodeId: string): void {
+/**
+ * Pide las fuentes en segundo plano, sin esperar la respuesta (en fila, de a una).
+ * `next`: es lo que sigue a lo que se está viendo (el próximo episodio o programa): pasa adelante de
+ * las demás precargas (pasar el mouse, canales vecinos), en el orden en que se pidió.
+ */
+export function prefetchStreams(episodeId: string, { next = false }: { next?: boolean } = {}): void {
   if (cached(episodeId)) return;
-  queue = [...queue.filter((id) => id !== episodeId), episodeId].slice(-MAX_QUEUED);
+  if (next) {
+    preferred = [...preferred.filter((id) => id !== episodeId), episodeId].slice(0, MAX_QUEUED);
+    queue = queue.filter((id) => id !== episodeId);
+  } else if (!preferred.includes(episodeId)) {
+    queue = [...queue.filter((id) => id !== episodeId), episodeId].slice(-MAX_QUEUED);
+  }
   pump();
 }
 
