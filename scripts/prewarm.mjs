@@ -30,6 +30,7 @@ async function getJson(path, timeoutMs = 90_000) {
 }
 
 const episodes = [];
+const reserves = [];
 for (const canal of CHANNELS) {
   try {
     const grid = await getJson(`/api/programacion?canal=${canal}&fecha=${fecha}`);
@@ -38,10 +39,17 @@ for (const canal of CHANNELS) {
     for (const slot of grid.slots.slice(Math.max(0, i), i + 2)) {
       if (!slot.external) episodes.push({ canal, name: slot.series.name, id: slot.episode.id });
     }
+    // El primer episodio de reserva del próximo programa (corre 10 min antes del cambio): si el de la
+    // grilla no carga, la tele pasa a ese y también arranca al instante.
+    const next = grid.slots[i + 1];
+    if (next && !next.external && next.more?.[0]) reserves.push({ canal, name: `${next.series.name} (reserva)`, id: next.more[0].id });
   } catch (error) {
     console.log(`${canal}: no se pudo leer la grilla (${error.message})`);
   }
 }
+
+// Las reservas van al final: primero lo que sale al aire seguro.
+episodes.push(...reserves);
 
 // De a uno: el addon tiene poca CPU y abre una página de Chromium por vez.
 let ok = 0;

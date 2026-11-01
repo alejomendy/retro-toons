@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Play } from "lucide-react";
+import { ChevronDown, ChevronUp, Loader2, Play } from "lucide-react";
 import { channelById, channelNumber, channels } from "@/data/channels";
 import PageHeader from "@/components/PageHeader";
 import { useTheaterMode } from "@/lib/use-theater";
@@ -20,6 +20,10 @@ import type { ChannelId } from "@/lib/types";
 import { brandBackground, CHANNEL_BRANDS, ChannelIdentAnimation, ChannelLogo, ChannelWordmark } from "@/components/ChannelBrand";
 
 type Grid = { key: string; slots: LcSlot[] } | { key: string; error: string };
+
+const DAY_MIN = 24 * 60;
+/** Desde esta hora (22:00) se carga también la grilla de mañana. */
+const LATE_NIGHT_MIN = 22 * 60;
 
 export default function ProgramacionClient({ channelId, explicit }: { channelId: ChannelId; explicit: boolean }) {
   const channel = channelById[channelId];
@@ -69,7 +73,28 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
   const nowMin = now ? minutesNow(now) : 0;
   const current = now ? slots.find((s) => nowMin >= s.start && nowMin < s.end) : undefined;
   const currentIndex = current ? slots.indexOf(current) : -1;
-  const upcoming = current ? slots.slice(currentIndex + 1, currentIndex + 4) : [];
+  // En las últimas horas del día también se carga la grilla de mañana (corrida 24 h): así "A continuación"
+  // y la tanda muestran lo que viene después de medianoche en vez de quedar vacíos.
+  const lateNight = !!now && nowMin >= LATE_NIGHT_MIN;
+  const [tomorrow, setTomorrow] = useState<{ key: string; slots: LcSlot[] } | null>(null);
+  useEffect(() => {
+    if (!lateNight || !now) return;
+    const day = new Date(now);
+    day.setDate(day.getDate() + 1);
+    let cancelled = false;
+    loadGrids(toDateParam(day))
+      .then((all) => {
+        if (cancelled) return;
+        const next = (all[channelId] ?? []).map((s) => ({ ...s, start: s.start + DAY_MIN, end: s.end + DAY_MIN }));
+        setTomorrow({ key: scheduleKey, slots: next });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [lateNight, scheduleKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nextDay = tomorrow?.key === scheduleKey ? tomorrow.slots : [];
+  const upcoming = current ? [...slots.slice(currentIndex + 1), ...nextDay].slice(0, 3) : [];
   // El reloj general avanza cada 10 s; para cambiar de programa justo a la hora de la grilla
   // se agenda un tic exacto en el fin del espacio actual.
   const currentEnd = current?.end;
@@ -316,8 +341,8 @@ const SHORT_BREAK_SECONDS = 15;
 const PREFETCH_NEXT_MS = 30_000;
 /** Si la grilla no llegó, se vuelve a pedir pasado este tiempo. */
 const GRID_RETRY_MS = 15_000;
-/** Si nada del espacio tenía señal, se vuelve a probar pasado este tiempo de tanda. */
-const SIGNAL_RETRY_MS = 3 * 60_000;
+/** Si nada del espacio tenía señal, se vuelve a probar pasado este tiempo (con la placa del canal, no la tanda). */
+const SIGNAL_RETRY_MS = 30_000;
 /** Series de otros horarios del canal que la tele puede pasar si la del espacio no tiene señal. */
 const RESCUE_SERIES = 8;
 
@@ -423,7 +448,8 @@ function LiveTv({
   const ownCount = 1 + (slot.more?.length ?? 0);
   const pick = play.key === slotKey ? play.pick : 0;
   // El próximo programa, si empieza justo cuando termina este (para adelantarlo).
-  const nextSlot = upcoming[0] && upcoming[0].start === slot.end && !upcoming[0].external ? upcoming[0] : undefined;
+  // Solo de hoy: el de mañana tiene otra clave de espacio y adelantarlo cortaría el episodio a medianoche.
+  const nextSlot = upcoming[0] && upcoming[0].start === slot.end && upcoming[0].start < DAY_MIN && !upcoming[0].external ? upcoming[0] : undefined;
   const nextSlotKey = nextSlot ? `${channelId}-${nextSlot.start}` : null;
   const early = play.key === slotKey && !!nextSlot && play.early === nextSlotKey ? nextSlot : undefined;
   const item = lineup[pick] ?? lineup[0];
@@ -501,32 +527,41 @@ function LiveTv({
 
   // Fuentes externas (iframe de YouTube, Pluto TV): no avisan cuándo terminan, se usa la duración del episodio.
   const externalOver = !!slot.external && minutesNow(now) - slot.start >= slot.external.minutes;
-  const inBreak = endedKey === slotKey || externalOver;
+  // Si el externo terminó antes que su espacio, se adelanta el próximo programa (como con los de LACartoons)
+  // en vez de dejar la tanda hasta el cambio de programa.
+  useEffect(() => {
+    if (!externalOver || !nextSlotKey || play.early === nextSlotKey) return;
+    if ((slot.end - minutesNow(new Date())) * 60 <= SHORT_BREAK_SECONDS) return;
+    setPlay((p) => (p.key === slotKey ? { ...p, startAt: 0, early: nextSlotKey, follows: true } : p));
+  }, [externalOver, nextSlotKey, play.early, slot.end, slotKey]);
+  // El iframe externo solo se ve mientras pasa su episodio; adelantado el próximo, va nuestro reproductor.
+  const externalView = !!slot.external && !early;
+  // Ningún episodio del espacio tenía señal (no es una tanda: el programa sigue al aire y se reintenta).
+  const noSignal = endedKey === slotKey && !externalView && playingKey !== playKey;
+  const inBreak = (endedKey === slotKey && !noSignal) || (externalOver && !early);
 
-  // La placa del canal tapa la carga del episodio nuevo (o se va sola si tarda demasiado).
+  // Mientras sintoniza (o busca otra señal) se ve la placa del canal: el programa está al aire, así que
+  // nunca la tanda de "Ya volvemos". Pasado IDENT_MAX_MS la placa avisa que la señal tarda.
   useEffect(() => {
     const id = window.setTimeout(() => setIdentExpiredKey(playKey), IDENT_MAX_MS);
     return () => window.clearTimeout(id);
   }, [playKey]);
-  const showIdent = !slot.external && !inBreak && playingKey !== playKey && identExpiredKey !== playKey;
-  // Si después de la placa el video todavía no arrancó (el addon tarda o se está buscando otra señal), pasa
-  // la tanda como cuando en la tele "ya volvemos": nunca estática ni "Sin señal".
-  const searchingLong = !slot.external && !inBreak && playingKey !== playKey && identExpiredKey === playKey;
+  const showIdent = !externalView && !inBreak && playingKey !== playKey;
+  const identStatus = noSignal ? "retrying" : identExpiredKey === playKey ? "slow" : "tuning";
 
-  // Tanda porque nada tenía señal: en un rato se vuelve a probar (el servidor de videos puede haber vuelto).
-  const failedBreak = endedKey === slotKey && !slot.external && playingKey !== playKey;
+  // Nada tenía señal: se vuelve a probar en un rato (el servidor de videos puede haber vuelto).
   useEffect(() => {
-    if (!failedBreak || (slot.end - minutesNow(new Date())) * 60 < MIN_FILL_SECONDS) return;
+    if (!noSignal || (slot.end - minutesNow(new Date())) * 60 < MIN_FILL_SECONDS) return;
     const id = window.setTimeout(() => {
       setEndedKey(null);
       setPlay({ key: slotKey, pick: 0, startAt: secondsIntoSlot(slot) });
     }, SIGNAL_RETRY_MS);
     return () => window.clearTimeout(id);
-  }, [failedBreak, slot, slotKey]);
+  }, [noSignal, slot, slotKey]);
   // Al sintonizar la placa dice "Ahora"; de un capítulo a otro, "A continuación".
   const transition = !!play.follows;
   // El zócalo aparece cuando arranca cada episodio (en los externos, al sintonizar).
-  const showLowerThird = !inBreak && (slot.external ? true : playingKey === playKey);
+  const showLowerThird = !inBreak && (externalView ? true : playingKey === playKey);
 
   // Tanda en el medio del episodio (en los cortes que encuentra el reproductor): el video queda en pausa.
   const [tanda, setTanda] = useState<{ key: string; index: number } | null>(null);
@@ -545,7 +580,7 @@ function LiveTv({
 
   const bumper = <Bumper channelId={channelId} upcoming={upcoming} />;
 
-  if (slot.external) {
+  if (externalView && slot.external) {
     return (
       <TvPlayer
         key={slotKey}
@@ -568,8 +603,8 @@ function LiveTv({
     <TvPlayer
       title={showing.series.name}
       subtitle={`${episodeLabel(episode)} · ${episode.title} · ${showing.block}`}
-      badge={inBreak || tandaNow || searchingLong ? "TANDA" : "EN VIVO"}
-      badgeColor={inBreak || tandaNow || searchingLong ? "#7c3aed" : "#ef4444"}
+      badge={inBreak || tandaNow ? "TANDA" : "EN VIVO"}
+      badgeColor={inBreak || tandaNow ? "#7c3aed" : "#ef4444"}
       overlay={
         <>
           <VideoPlayer
@@ -590,18 +625,18 @@ function LiveTv({
             </div>
           )}
           {/* La placa se desvanece cuando arranca el video (en vez de desaparecer de golpe). */}
-          {!slot.external && !inBreak && (
+          {!inBreak && (
             <div
               className={`absolute inset-0 z-20 transition-opacity duration-700 ${showIdent ? "opacity-100" : "pointer-events-none opacity-0"}`}
               aria-hidden={!showIdent}
             >
-              <ChannelIdent key={playKey} channelId={channelId} slot={showing} transition={transition} />
+              <ChannelIdent key={playKey} channelId={channelId} slot={showing} transition={transition} status={identStatus} />
             </div>
           )}
           {/* Corte con estática, como al cambiar de programa en la tele. */}
           {transition && <span key={`cut-${playKey}`} className="zap static-noise pointer-events-none absolute inset-0 z-30 bg-black" aria-hidden />}
           {showLowerThird && <LowerThird key={playKey} slot={showing} color={channel.color} ink={channel.ink} />}
-          {(inBreak || searchingLong) && <div className="absolute inset-0 z-20">{bumper}</div>}
+          {inBreak && <div className="absolute inset-0 z-20">{bumper}</div>}
         </>
       }
       cinema={cinema}
@@ -613,9 +648,21 @@ function LiveTv({
 
 /**
  * Placa del canal mientras se sintoniza el episodio nuevo (en vez de estática). Entre capítulos
- * dice "A continuación" y una barra muestra que la espera tiene tope (IDENT_MAX_MS).
+ * dice "A continuación". Si tarda (el servidor de videos se despierta), queda con un aviso honesto:
+ * el programa sigue al aire, nunca "Ya volvemos" ni "Sin señal".
  */
-function ChannelIdent({ channelId, slot, transition }: { channelId: ChannelId; slot: LcSlot; transition: boolean }) {
+function ChannelIdent({
+  channelId,
+  slot,
+  transition,
+  status = "tuning",
+}: {
+  channelId: ChannelId;
+  slot: LcSlot;
+  transition: boolean;
+  /** "tuning": los primeros segundos (barra); "slow": tarda más de lo normal; "retrying": nada tenía señal y se reintenta. */
+  status?: "tuning" | "slow" | "retrying";
+}) {
   return (
     <div className={`ident-bg-${channelId} absolute inset-0 overflow-hidden`} style={brandBackground(channelId)}>
       <div className="absolute inset-0 grid place-items-center p-4 text-center sm:p-6">
@@ -629,9 +676,16 @@ function ChannelIdent({ channelId, slot, transition }: { channelId: ChannelId; s
             label={transition ? "A CONTINUACIÓN" : `AHORA · ${formatTime(slot.start)}`}
             labelClass={transition ? "text-accent" : "text-red-400"}
           />
-          <div className="mx-auto h-2 w-48 overflow-hidden rounded-full border-2 border-black bg-black/40" aria-hidden>
-            <div className="ident-progress h-full bg-current" style={{ animationDuration: `${IDENT_MAX_MS}ms` }} />
-          </div>
+          {status === "tuning" ? (
+            <div className="mx-auto h-2 w-48 overflow-hidden rounded-full border-2 border-black bg-black/40" aria-hidden>
+              <div className="ident-progress h-full bg-current" style={{ animationDuration: `${IDENT_MAX_MS}ms` }} />
+            </div>
+          ) : (
+            <p role="status" className="mx-auto flex max-w-xs items-center justify-center gap-2 rounded bg-black/70 px-2 py-1 text-sm text-white">
+              <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+              {status === "slow" ? "Sintonizando la señal… la primera vez puede tardar hasta un minuto." : "La señal está fallando: seguimos intentando."}
+            </p>
+          )}
         </div>
       </div>
     </div>
