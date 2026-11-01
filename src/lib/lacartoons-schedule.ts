@@ -373,7 +373,10 @@ export async function getExternalSeries(): Promise<ExternalSeries[]> {
         const series = await cachedSeries(found.id).catch(() => null);
         if (series && series.videos.length > 0 && isPlayable(series)) return null;
       }
-      const numbers = await getAvailableEpisodes(show).catch(() => []);
+      const numbers = await getAvailableEpisodes(show).catch((): number[] => {
+        failed++;
+        return [];
+      });
       return numbers.length > 0 ? show : null;
     }),
   );
