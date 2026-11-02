@@ -471,7 +471,7 @@ const cachedExternalSeries = unstable_cache(() => getExternalSeries(), ["retroto
 let lastExternal: ExternalSeries[] = [];
 
 const ANIME_TITLES_REGEX =
-  /\b(dragon ball|saint seiya|caballeros del zodiaco|sailor moon|ranma|pokemon|digimon|yu-gi-oh|yugioh|sakura card|inuyasha|death note|super campeones|capitan tsubasa|slam dunk|samurai x|samurai champloo|cowboy bebop|trigun|zatch bell|shaman king|beyblade|medabots|detective conan|mazinger|robotech|naruto|one piece|attack on titan|shingeki|demon slayer|kimetsu|jujutsu|hunter x hunter|bleach|fullmetal|chainsaw man|evangelion|spy x family|solo leveling|frieren|tokyo ghoul|my hero academia|boku no hero|one punch man|mob psycho|vinland saga|ojos de gato|guerreras magicas|gundam|astro boy|speed racer|meteoro|candy candy)\b/i;
+  /\b(dragon ball|saint seiya|caballeros del zodiaco|sailor moon|ranma|pokemon|digimon|yu-gi-oh|yugioh|sakura card|inuyasha|death note|super campeones|capitan tsubasa|slam dunk|samurai x|samurai champloo|cowboy bebop|trigun|zatch bell|shaman king|beyblade|medabots|detective conan|mazinger|robotech|naruto|one piece|attack on titan|shingeki|demon slayer|kimetsu|jujutsu|hunter x hunter|bleach|fullmetal|chainsaw man|evangelion|spy x family|solo leveling|frieren|tokyo ghoul|my hero academia|boku no hero|one punch man|mob psycho|vinland saga|ojos de gato|guerreras magicas|gundam|astro boy|speed racer|meteoro|candy candy|steins;gate|steins gate|code geass|black clover|haikyu|sword art online|sao|dr\. stone|dr stone|yu yu hakusho|monster|berserk|castlevania|hellsing|cyberpunk)\b/i;
 
 async function libraryCatalog(): Promise<LcSeriesSummary[]> {
   const pending = cachedExternalSeries()
