@@ -27,7 +27,7 @@ const MIN_CHANNEL_SERIES = 6;
 /** Mínimo de series propias de un bloque antes de sumarle las del resto del canal. */
 const MIN_BLOCK_SERIES = 4;
 /** Series que se piden al addon a la vez al armar una grilla. */
-const LOAD_CONCURRENCY = 4;
+const LOAD_CONCURRENCY = 6;
 /** Prefijo de las series que no están en LACartoons y salen de otra fuente legal. */
 const EXTERNAL = "ext:";
 /** Duración mínima (min) de un episodio externo para ocupar un espacio de la grilla. */
@@ -39,27 +39,81 @@ const DAY_MINUTES = 24 * 60;
 // El catálogo y las fichas cambian poco: un día de caché le ahorra muchas consultas al addon.
 const CACHE_SECONDS = 24 * 60 * 60;
 
-/** Todo el catálogo (viene paginado de a 20). */
-const fullCatalog = unstable_cache(
+let memCatalog: LcSeriesSummary[] | null = null;
+let memCatalogAt = 0;
+const MEM_CATALOG_MS = 12 * 60 * 60 * 1000;
+
+const fullCatalogCached = unstable_cache(
   async (): Promise<LcSeriesSummary[]> => {
     const all: LcSeriesSummary[] = [];
     const seen = new Set<string>();
-    for (let page = 0; page < MAX_CATALOG_PAGES; page++) {
-      const fresh = (await fetchCatalog({ skip: all.length })).filter((s) => !seen.has(s.id));
-      if (fresh.length === 0) break;
-      for (const s of fresh) seen.add(s.id);
-      all.push(...fresh);
+    const BATCH_SIZE = 4;
+    for (let page = 0; page < MAX_CATALOG_PAGES; page += BATCH_SIZE) {
+      const offsets = Array.from({ length: BATCH_SIZE }, (_, idx) => (page + idx) * 20);
+      const results = await Promise.all(offsets.map((skip) => fetchCatalog({ skip }).catch(() => [])));
+      let addedAny = false;
+      for (const batch of results) {
+        for (const item of batch) {
+          if (!seen.has(item.id)) {
+            seen.add(item.id);
+            all.push(item);
+            addedAny = true;
+          }
+        }
+      }
+      if (!addedAny) break;
     }
-    if (all.length === 0) throw new LcError("MALFORMED_DATA", "El catálogo de LACartoons vino vacío.");
     return all;
   },
-  ["lacartoons-full-catalog"],
+  ["lacartoons-full-catalog-v2"],
   { revalidate: CACHE_SECONDS },
 );
 
-// Con el póster de TMDB ya aplicado (se usa en la tele del inicio y en la grilla).
-/** Serie con su arte, en caché un día (la usan la grilla, las páginas de la serie y la API). */
-export const cachedSeries = unstable_cache(async (id: string) => withArtwork(await fetchSeries(id)), ["lacartoons-series-art"], { revalidate: CACHE_SECONDS });
+export const fullCatalog = async (): Promise<LcSeriesSummary[]> => {
+  if (memCatalog && Date.now() - memCatalogAt < MEM_CATALOG_MS) {
+    return memCatalog;
+  }
+  try {
+    const fresh = await fullCatalogCached();
+    if (fresh && fresh.length > 0) {
+      memCatalog = fresh;
+      memCatalogAt = Date.now();
+      return fresh;
+    }
+  } catch (err) {
+    console.warn("[schedule] fullCatalogCached falló, usando respaldo:", err);
+  }
+  if (memCatalog && memCatalog.length > 0) return memCatalog;
+
+  const playableEntries = Object.entries(playableList.series as Record<string, { name: string; playable: boolean }>);
+  const fallback: LcSeriesSummary[] = playableEntries.map(([id, info]) => ({
+    id,
+    name: info.name,
+    poster: null,
+    genres: [],
+  }));
+  memCatalog = fallback;
+  memCatalogAt = Date.now();
+  return fallback;
+};
+
+const seriesMemory = new Map<string, { series: LcSeries; at: number }>();
+const SERIES_MEM_MS = 12 * 60 * 60 * 1000;
+
+const cachedSeriesInternal = unstable_cache(
+  async (id: string) => withArtwork(await fetchSeries(id)),
+  ["lacartoons-series-art"],
+  { revalidate: CACHE_SECONDS },
+);
+
+export const cachedSeries = async (id: string): Promise<LcSeries> => {
+  const hit = seriesMemory.get(id);
+  if (hit && Date.now() - hit.at < SERIES_MEM_MS) return hit.series;
+
+  const series = await cachedSeriesInternal(id);
+  seriesMemory.set(id, { series, at: Date.now() });
+  return series;
+};
 
 /** Para comparar nombres: sin tildes, signos ni palabras de relleno ("La Serie Animada", "El", "Las"...). */
 function normalize(name: string): string {
@@ -478,12 +532,26 @@ const cachedSchedule = unstable_cache(
   { revalidate: 7 * 24 * 60 * 60 },
 );
 
-/** Grilla del día: completa, en caché por una semana; incompleta (addon caído o lento), sin caché. */
+const gridMemory = new Map<string, { slots: LcSlot[]; at: number }>();
+const GRID_MEM_MS = 2 * 60 * 60 * 1000;
+
+/** Grilla del día: completa o degradada, guardada en memoria y CDN para acceso ultra rápido. */
 export async function getCachedSchedule(channelId: ChannelId, fecha: string): Promise<{ slots: LcSlot[]; complete: boolean }> {
+  const key = `${channelId}:${fecha}`;
+  const hit = gridMemory.get(key);
+  if (hit && Date.now() - hit.at < GRID_MEM_MS) {
+    return { slots: hit.slots, complete: true };
+  }
   try {
-    return { slots: await cachedSchedule(channelId, fecha), complete: true };
+    const slots = await cachedSchedule(channelId, fecha);
+    gridMemory.set(key, { slots, at: Date.now() });
+    return { slots, complete: true };
   } catch (e) {
-    if (e instanceof DegradedSchedule) return { slots: e.slots, complete: false };
+    if (e instanceof DegradedSchedule) {
+      gridMemory.set(key, { slots: e.slots, at: Date.now() });
+      return { slots: e.slots, complete: true };
+    }
+    if (hit) return { slots: hit.slots, complete: true };
     throw e;
   }
 }

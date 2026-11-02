@@ -10,6 +10,8 @@ import { findYoutubeVideo } from "@/lib/youtube";
 import { channelEpisodeTitles, channelMatcher } from "@/lib/youtube-channels";
 import { getPlutoOptions, getPlutoSeriesEpisodes, plutoMatcher, type PlutoEpisode } from "@/lib/pluto";
 import { findDailymotionVideo } from "@/lib/dailymotion";
+import { getImdbIdFromTmdb } from "@/lib/imdb";
+import { getTorrentStreams } from "@/lib/torrentio";
 import type { Episode, Show, ShowExtras, VideoSource } from "@/lib/types";
 
 /**
@@ -200,11 +202,20 @@ export async function getShowWithEpisodes(show: Show): Promise<{ show: Show; ext
   return { show, extras, episodes };
 }
 
+const fullEpisodeCache = new Map<string, { ep: Episode; at: number }>();
+const EPISODE_CACHE_MS = 60 * 60 * 1000;
+
 export async function getFullEpisode(show: Show, number: number): Promise<Episode> {
+  const cacheKey = `${show.id}:${number}`;
+  const hit = fullEpisodeCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < EPISODE_CACHE_MS) return hit.ep;
+
   const tmdb = await loadTmdb(show);
   const t = (await tmdbEpisodes(show, tmdb, [number])).episodes.get(number);
   const episode = toEpisode(getEpisode(show, number), t);
-  return { ...episode, source: await resolveSource(show, episode, tmdb?.name, episodeNamesOf(t), seasonCountsOf(tmdb)) };
+  const full = { ...episode, source: await resolveSource(show, episode, tmdb?.name, episodeNamesOf(t), seasonCountsOf(tmdb)) };
+  fullEpisodeCache.set(cacheKey, { ep: full, at: Date.now() });
+  return full;
 }
 
 function seriesNames(show: Show, localTitle?: string | null): string[] {
@@ -278,7 +289,12 @@ const available = new Map<string, { at: number; value: Promise<number[]> }>();
 async function computeAvailable(show: Show): Promise<number[]> {
   const tmdb = await loadTmdb(show);
   const find = await sourceFinder(show, tmdb?.name, seasonCountsOf(tmdb));
-  if (!find) return [];
+  if (!find) {
+    if (show.tmdbId || show.year) {
+      return getEpisodes(show).map((e) => e.number);
+    }
+    return [];
+  }
   const numbers = getEpisodes(show).map((e) => e.number);
   const { episodes } = await tmdbEpisodes(show, tmdb, numbers);
   return numbers.filter((n) => {
@@ -300,6 +316,29 @@ export async function resolveSource(
 ): Promise<VideoSource | undefined> {
   const own = (await sourceFinder(show, localTitle, seasonCounts))?.(episode, episodeNames);
   if (own) return own;
+
+  // 1. Intentar streaming P2P vía Torrentio (alta calidad, audio latino disponible)
+  try {
+    const tmdbId = show.tmdbId ?? (await findTmdbId(show.originalTitle, show.year));
+    if (tmdbId) {
+      const imdbId = await getImdbIdFromTmdb(tmdbId);
+      if (imdbId) {
+        const season = episode.season ?? 1;
+        const epNum = episode.numberInSeason ?? episode.number;
+        const torrents = await getTorrentStreams(imdbId, season, epNum);
+        if (torrents.length > 0) {
+          const best = torrents[0];
+          return {
+            type: "file",
+            url: `/api/p2p/${best.infoHash}/${best.fileIdx}`,
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[catalog] Error buscando torrents para ${show.title}:`, err);
+  }
+
   // Sin ningún nombre de episodio no hay forma de verificar que un video de búsqueda sea el correcto.
   if (episodeNames.length === 0) return undefined;
   const series = localTitle ?? show.title;
