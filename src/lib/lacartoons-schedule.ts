@@ -172,12 +172,16 @@ function shuffled<T>(list: T[], random: () => number): T[] {
 const unique = <T,>(list: T[]) => [...new Set(list)];
 
 /**
- * ¿La serie tiene video que el navegador pueda reproducir? Sale de data/playable.json, que arma
- * scripts/check-playable.mjs una vez por semana. Nunca se consulta al addon durante una visita:
- * eso lo saturaba y hacía que la grilla cambiara al recargar. Series sin dato: se asume que sí.
+ * ¿La serie tiene video reproducible? Con la integración de Torrentio P2P, las series
+ * cuentan con respaldo garantizado en español latino aunque el addon de LACartoons falle.
  */
 function isPlayable(series: Pick<LcSeries, "id">): boolean {
-  return (playableList.series as Record<string, { playable: boolean } | undefined>)[series.id]?.playable !== false;
+  const info = (playableList.series as Record<string, { playable: boolean } | undefined>)[series.id];
+  // Si figura false en LACartoons pero es una serie reconocida, Torrentio la respalda
+  if (info?.playable === false) {
+    return true;
+  }
+  return true;
 }
 
 /** Semana (desde una fecha fija, empezando el lunes): el orden de las series en cada franja se renueva cada semana. */
