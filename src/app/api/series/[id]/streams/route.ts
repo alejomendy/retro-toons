@@ -20,25 +20,29 @@ async function getP2pStreamsForEpisode(id: string): Promise<LcStream[]> {
     const season = parts.length >= 3 ? Number.parseInt(parts[1], 10) || 1 : 1;
     const episode = parts.length >= 3 ? Number.parseInt(parts[2], 10) || 1 : Number.parseInt(parts[1], 10) || 1;
 
+    let isAnime = false;
     let imdbId: string | null = null;
     const local = showById[seriesId];
     if (local?.tmdbId) {
       imdbId = await getImdbIdFromTmdb(local.tmdbId);
+      isAnime = local.genre?.toLowerCase().includes("anime") || (local.channels && local.channels.length === 0);
     } else if (local) {
       imdbId = await findImdbId(local.originalTitle || local.title, local.year);
+      isAnime = local.genre?.toLowerCase().includes("anime") || (local.channels && local.channels.length === 0);
     } else {
       const pName = (playableList.series as Record<string, { name: string } | undefined>)[seriesId]?.name;
       if (pName) {
         imdbId = await findImdbId(pName);
+        isAnime = /dragon ball|saint seiya|caballeros|sailor moon|naruto|one piece|death note|bleach|pokemon|digimon|evangelion|inuyasha|ranma|sakura|yugioh|yu-gi-oh|slam dunk|samurai x|samurai champloo|cowboy bebop|trigun|zatch|shaman|beyblade|medabots|detective conan|mazinger|attack on titan|shingeki|demon slayer|kimetsu|jujutsu|hunter x hunter/i.test(pName);
       }
     }
 
     if (!imdbId) return [];
 
-    const torrents = await getTorrentStreams(imdbId, season, episode);
+    const torrents = await getTorrentStreams(imdbId, season, episode, { isAnime });
     return torrents.slice(0, 4).map((t) => ({
       url: `/api/p2p/${t.infoHash}/${t.fileIdx}`,
-      label: `P2P · ${t.resolution} ${t.isLatino ? "🇲🇽 Latino" : ""} (${t.seeders} seeds)`,
+      label: `P2P · ${t.resolution} ${t.tagLabel || (t.isLatino ? "🇲🇽 Latino" : "")} (${t.seeders} seeds)`,
       kind: "mp4",
       mimeType: "video/mp4",
       notWebReady: false,

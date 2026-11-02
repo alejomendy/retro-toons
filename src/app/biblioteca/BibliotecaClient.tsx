@@ -18,8 +18,12 @@ const FAVORITES = "favoritos";
 
 type Status = "loading" | "ready" | "error";
 
-/** Colores de marca para las cadenas que coinciden con un canal de la programación. */
-const brandByGenre = new Map(channels.map((c) => [c.name, { bg: c.color, ink: c.ink }]));
+/** Colores de marca para las cadenas que coinciden con un canal de la programación o géneros especiales. */
+const brandByGenre = new Map<string, { bg: string; ink: string }>([
+  ...channels.map((c) => [c.name, { bg: c.color, ink: c.ink }] as const),
+  ["Animes", { bg: "#dc2626", ink: "#ffffff" }],
+  ["Anime", { bg: "#dc2626", ink: "#ffffff" }],
+]);
 
 /** Pide una página del catálogo a /api/series y valida la respuesta. */
 async function fetchPage(params: { q: string; genre: string; skip: number }, signal: AbortSignal): Promise<LcSeriesSummary[]> {

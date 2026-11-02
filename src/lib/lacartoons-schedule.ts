@@ -466,6 +466,9 @@ const cachedExternalSeries = unstable_cache(() => getExternalSeries(), ["retroto
 /** Última lista conocida (aunque esté incompleta): se muestra mientras se completa la de la caché. */
 let lastExternal: ExternalSeries[] = [];
 
+const ANIME_TITLES_REGEX =
+  /\b(dragon ball|saint seiya|caballeros del zodiaco|sailor moon|ranma|pokemon|digimon|yu-gi-oh|yugioh|sakura card|inuyasha|death note|super campeones|capitan tsubasa|slam dunk|samurai x|samurai champloo|cowboy bebop|trigun|zatch bell|shaman king|beyblade|medabots|detective conan|mazinger|robotech|naruto|one piece|attack on titan|shingeki|demon slayer|kimetsu|jujutsu|hunter x hunter|bleach|fullmetal|chainsaw man|evangelion|spy x family|solo leveling|frieren|tokyo ghoul|my hero academia|boku no hero|one punch man|mob psycho|vinland saga|ojos de gato|guerreras magicas|gundam|astro boy|speed racer|meteoro|candy candy)\b/i;
+
 async function libraryCatalog(): Promise<LcSeriesSummary[]> {
   const pending = cachedExternalSeries()
     .then((list) => (lastExternal = list))
@@ -474,14 +477,27 @@ async function libraryCatalog(): Promise<LcSeriesSummary[]> {
       if (e instanceof IncompleteExternalSeries && e.series.length >= lastExternal.length) lastExternal = e.series;
       return lastExternal;
     });
-  const [lc, external] = await Promise.all([
+  const [lcRaw, external] = await Promise.all([
     fullCatalog(),
     Promise.race([pending, new Promise<ExternalSeries[]>((resolve) => setTimeout(() => resolve(lastExternal), EXTERNAL_WAIT_MS))]),
   ]);
+
+  const lc = lcRaw.map((s) => {
+    const isAnime = ANIME_TITLES_REGEX.test(s.name);
+    if (isAnime && !s.genres.includes("Animes")) {
+      return { ...s, genres: [...s.genres, "Animes"] };
+    }
+    return s;
+  });
+
   const extra = external.map((s): LcSeriesSummary => {
-    const genres = unique((showById[s.id]?.channels ?? []).map((c) => GENRE_BY_CHANNEL[c]));
+    const show = showById[s.id];
+    const isAnime = show?.genre?.toLowerCase().includes("anime") || ANIME_TITLES_REGEX.test(s.name);
+    const channelGenres = (show?.channels ?? []).map((c) => GENRE_BY_CHANNEL[c]);
+    const genres = unique([...channelGenres, ...(isAnime ? ["Animes"] : [])]);
     return { id: s.id, name: s.name, poster: s.poster, genres: genres.length > 0 ? genres : ["Otros"] };
   });
+
   return [...lc, ...extra].sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
@@ -516,7 +532,8 @@ const cachedGenres = unstable_cache(
 );
 
 export async function getGenres(): Promise<string[]> {
-  return cachedGenres().catch((): string[] => []);
+  const fromCache = await cachedGenres().catch((): string[] => []);
+  return unique(["Cartoon Network", "Nickelodeon", "Fox Kids", "Disney", "Warner Channel", "Animes", ...fromCache]);
 }
 
 /**

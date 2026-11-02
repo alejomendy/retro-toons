@@ -287,15 +287,14 @@ const ONE_HOUR_MS = 60 * 60 * 1000;
 const available = new Map<string, { at: number; value: Promise<number[]> }>();
 
 async function computeAvailable(show: Show): Promise<number[]> {
+  const numbers = getEpisodes(show).map((e) => e.number);
+  // Si la serie tiene tmdbId o año de estreno, se puede reproducir completa vía Torrentio P2P o fuentes legales
+  if (show.tmdbId || show.year) {
+    return numbers;
+  }
   const tmdb = await loadTmdb(show);
   const find = await sourceFinder(show, tmdb?.name, seasonCountsOf(tmdb));
-  if (!find) {
-    if (show.tmdbId || show.year) {
-      return getEpisodes(show).map((e) => e.number);
-    }
-    return [];
-  }
-  const numbers = getEpisodes(show).map((e) => e.number);
+  if (!find) return [];
   const { episodes } = await tmdbEpisodes(show, tmdb, numbers);
   return numbers.filter((n) => {
     const t = episodes.get(n);
@@ -325,7 +324,8 @@ export async function resolveSource(
       if (imdbId) {
         const season = episode.season ?? 1;
         const epNum = episode.numberInSeason ?? episode.number;
-        const torrents = await getTorrentStreams(imdbId, season, epNum);
+        const isAnime = show.genre?.toLowerCase().includes("anime") || (show.channels && show.channels.length === 0);
+        const torrents = await getTorrentStreams(imdbId, season, epNum, { isAnime });
         if (torrents.length > 0) {
           const best = torrents[0];
           return {

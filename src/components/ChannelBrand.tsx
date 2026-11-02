@@ -160,6 +160,8 @@ export const GENRE_LOGOS: Record<string, { src: string; width: number; height: n
   "Fox Kids": { src: "https://upload.wikimedia.org/wikipedia/commons/f/fa/FOX_Kids_logo.svg", width: 200, height: 176 },
   "Hanna Barbera": { src: "https://upload.wikimedia.org/wikipedia/commons/c/c0/Hanna-Barbera.svg", width: 585, height: 344 },
   Marvel: { src: "https://upload.wikimedia.org/wikipedia/commons/b/b9/Marvel_Logo.svg", width: 1000, height: 402 },
+  Animes: { src: "https://upload.wikimedia.org/wikipedia/commons/b/bd/Toonami_logo_%282004-2007%29.svg", width: 400, height: 110 },
+  Anime: { src: "https://upload.wikimedia.org/wikipedia/commons/b/bd/Toonami_logo_%282004-2007%29.svg", width: 400, height: 110 },
 };
 
 /** Logo de una cadena del catálogo (si hay); `null` si no tiene (se muestra el nombre). */
