@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, ChevronLeft, ChevronRight, Play } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import Image from "next/image";
 import { getFullEpisode, getShowWithEpisodes } from "@/lib/catalog";
 import TvPlayer from "@/components/TvPlayer";
 import ChannelBadge from "@/components/ChannelBadge";
 import ShowCover from "@/components/ShowCover";
+import LocalEpisodeSidebar from "@/components/series/LocalEpisodeSidebar";
 import type { Show } from "@/lib/types";
 
 /**
@@ -189,31 +190,12 @@ export default async function LocalShowPage({ show, query }: { show: Show; query
           </p>
         </section>
 
-        <aside className="chunky flex max-h-[640px] flex-col overflow-hidden rounded-xl bg-panel">
-          <h2 className="border-b-4 border-black bg-black px-4 py-2 font-display text-lg text-accent">
-            Episodios <span className="font-mono text-xl text-white/65">({show.episodeCount})</span>
-          </h2>
-          <ol className="flex-1 overflow-y-auto">
-            {episodes.map((e) => {
-              const active = e.number === epNumber;
-              return (
-                <li key={e.number}>
-                  <Link
-                    href={`/biblioteca/${show.id}?ep=${e.number}`}
-                    scroll={false}
-                    aria-current={active ? "true" : undefined}
-                    className={`flex items-center gap-3 px-4 py-2 hover:bg-white/10 ${active ? "bg-[#ff3ea5]/30" : ""}`}
-                  >
-                    <span className="w-10 font-mono text-2xl leading-none text-accent">{String(e.number).padStart(2, "0")}</span>
-                    <span className="flex-1 truncate">{e.title}</span>
-                    {active ? <Play className="size-4 fill-current" /> : <span className="text-xs text-white/65">{e.minutes}′</span>}
-                    {!e.source && <span className="sr-only">(sin video cargado)</span>}
-                  </Link>
-                </li>
-              );
-            })}
-          </ol>
-        </aside>
+        <LocalEpisodeSidebar
+          showId={show.id}
+          episodes={episodes}
+          currentNumber={epNumber}
+          totalCount={show.episodeCount}
+        />
       </div>
     </div>
   );

@@ -183,7 +183,22 @@ export async function getShowWithEpisodes(show: Show): Promise<{ show: Show; ext
     tmdbEpisodes(show, tmdb, base.map((e) => e.number)),
     show.pluto === false ? [] : getPlutoOptions(seriesNames(show, tmdb?.name), show.title),
   ]);
-  const episodes = base.map((e) => toEpisode(e, eps.get(e.number)));
+  const epsPerSeason = Math.max(1, Math.ceil(show.episodeCount / (show.seasons || 1)));
+  const episodes = base.map((e) => {
+    const t = eps.get(e.number);
+    const converted = toEpisode(e, t);
+    if (!converted.season) {
+      const calculatedSeason = Math.min(show.seasons || 1, Math.floor((e.number - 1) / epsPerSeason) + 1);
+      const inSeason = ((e.number - 1) % epsPerSeason) + 1;
+      return {
+        ...converted,
+        season: calculatedSeason,
+        numberInSeason: inSeason,
+        title: converted.title.startsWith("T") ? converted.title : `T${calculatedSeason}·E${inSeason} — ${converted.title}`,
+      };
+    }
+    return converted;
+  });
 
   const extras: ShowExtras = {
     localTitle: tmdb?.name ?? null,
