@@ -78,3 +78,34 @@ export async function findImdbId(title: string, year?: number | null): Promise<s
   }
 }
 
+
+const seasonCache = new Map<string, { counts: Map<number, number> | null; at: number }>();
+
+/**
+ * Episodios de cada temporada (sin la 0 de especiales) de una serie, por su IMDb ID. Sirve para pasar a
+ * temporada y episodio los números absolutos de LACartoons ("T1 E221" de Dragon Ball Z).
+ */
+export async function getSeasonCounts(imdbId: string): Promise<Map<number, number> | null> {
+  const cached = seasonCache.get(imdbId);
+  if (cached && Date.now() - cached.at < ONE_DAY_MS) return cached.counts;
+
+  const { headers, search } = getTmdbHeaders();
+  try {
+    search.set("external_source", "imdb_id");
+    const found = await fetch(`${BASE}/find/${encodeURIComponent(imdbId)}?${search}`, { headers, signal: AbortSignal.timeout(6000) });
+    const tvId = found.ok ? ((await found.json()) as { tv_results?: { id: number }[] }).tv_results?.[0]?.id : undefined;
+    let counts: Map<number, number> | null = null;
+    if (tvId) {
+      search.delete("external_source");
+      const res = await fetch(`${BASE}/tv/${tvId}?${search}`, { headers, signal: AbortSignal.timeout(6000) });
+      const data = res.ok ? ((await res.json()) as { seasons?: { season_number: number; episode_count: number }[] }) : null;
+      const seasons = (data?.seasons ?? []).filter((s) => s.season_number > 0 && s.episode_count > 0).sort((a, b) => a.season_number - b.season_number);
+      if (seasons.length > 0) counts = new Map(seasons.map((s) => [s.season_number, s.episode_count]));
+    }
+    seasonCache.set(imdbId, { counts, at: Date.now() });
+    return counts;
+  } catch (err) {
+    console.warn(`[imdb] Error al buscar temporadas de ${imdbId}:`, err);
+    return null;
+  }
+}

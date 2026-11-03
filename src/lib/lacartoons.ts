@@ -222,6 +222,31 @@ const STREAM_PAUSE_MS = 60_000;
 let streamFailures = 0;
 let streamsPausedUntil = 0;
 
+/** Un MP4 directo más chico que esto no es un episodio de 22 minutos. */
+const MIN_EPISODE_BYTES = 1024 * 1024;
+
+/**
+ * ¿Es el video de reemplazo de un host? sendvid devuelve un clip de 5 s (~36 KB) cuando el original fue
+ * borrado: en la biblioteca se veían 5 segundos y en vivo la tele lo daba por terminado. Solo se miran los
+ * MP4 directos; si el host no contesta a tiempo se deja la fuente (el reproductor igual la descarta).
+ */
+async function isPlaceholderVideo(stream: LcStream): Promise<boolean> {
+  if (stream.kind !== "mp4" || !/^https?:\/\//.test(stream.url)) return false;
+  try {
+    const res = await fetch(stream.url, {
+      method: "HEAD",
+      headers: { "user-agent": "Mozilla/5.0", referer: new URL(stream.url).origin + "/" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+    const length = Number(res.headers.get("content-length"));
+    const isVideo = (res.headers.get("content-type") ?? "").startsWith("video/");
+    return res.ok && isVideo && Number.isFinite(length) && length > 0 && length < MIN_EPISODE_BYTES;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchStreams(episodeId: string): Promise<LcStream[]> {
   if (!isValidEpisodeId(episodeId)) throw new LcError("INVALID_ID");
   if (Date.now() < streamsPausedUntil) throw new LcError("ADDON_UNREACHABLE", "El servidor de videos está saturado. Probá de nuevo en un minuto.");
@@ -239,7 +264,9 @@ export async function fetchStreams(episodeId: string): Promise<LcStream[]> {
     throw error;
   }
   if (!isObj(data) || !Array.isArray(data.streams)) throw new LcError("MALFORMED_DATA");
-  const streams = data.streams.map(parseStream).filter((s): s is LcStream => !!s);
+  const parsed = data.streams.map(parseStream).filter((s): s is LcStream => !!s);
+  const placeholder = await Promise.all(parsed.map(isPlaceholderVideo));
+  const streams = parsed.filter((_, i) => !placeholder[i]);
   // Primero las que el navegador puede reproducir tal cual (ej. el proxy del addon). Las directas de ok.ru
   // piden encabezados y quedan firmadas para la IP del servidor que las pidió: con el addon en la nube suelen fallar.
   const needsHelp = (s: LcStream) => (s.notWebReady || s.requiresHeaders ? 1 : 0);
@@ -333,7 +360,7 @@ const streamsCache = unstable_cache(
     if (streams.length === 0) throw new LcError("NO_STREAMS");
     return streams;
   },
-  ["lacartoons-streams-v5"],
+  ["lacartoons-streams-v6"],
   { revalidate: 3 * 60 * 60 },
 );
 

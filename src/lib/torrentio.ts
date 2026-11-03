@@ -1,6 +1,15 @@
 import "server-only";
 
 const TORRENTIO_BASE = process.env.TORRENTIO_BASE?.trim() || "https://torrentio.strem.fun";
+/**
+ * Configuración de Torrentio: todos los proveedores, incluidos los en español (MejorTorrent, Wolfmax4k,
+ * Cinecalidad, BestTorrents), y prioridad a latino/español. Sin esto se consultaba la configuración por
+ * defecto y se perdían torrents en español (ej. Coraje, Samurai Jack). Se puede cambiar con TORRENTIO_OPTIONS.
+ */
+const TORRENTIO_OPTIONS =
+  process.env.TORRENTIO_OPTIONS?.trim() ||
+  "providers=yts,eztv,rarbg,1337x,thepiratebay,kickasstorrents,torrentgalaxy,magnetdl,horriblesubs,nyaasi,tokyotosho,anidex,rutor,rutracker,comando,bludv,torrent9,ilcorsaronero,mejortorrent,wolfmax4k,cinecalidad,besttorrents|language=latino,spanish";
+const TORRENTIO = `${TORRENTIO_BASE}/${TORRENTIO_OPTIONS}`;
 const CACHE_MS = 60 * 60 * 1000;
 
 export type AudioLanguage = "latino" | "dual-latino" | "castellano" | "sub-es" | "other";
@@ -24,7 +33,16 @@ interface RawTorrentioStream {
   title?: string;
   infoHash?: string;
   fileIdx?: number;
+  behaviorHints?: { filename?: string };
 }
+
+/**
+ * El navegador no decodifica HEVC/x265 ni video de 10 bits, y AVI/WMV no los abre: esos torrents
+ * daban "MEDIA_ERR_SRC_NOT_SUPPORTED" y rompían el reproductor. Se descartan.
+ */
+const UNPLAYABLE_VIDEO = /\b(x\.?265|h\.?265|hevc|10[ -]?bits?|av1)\b|\.(avi|wmv|flv|ts|m2ts)$/i;
+/** Audio AC3/EAC3/DTS: Chrome no lo reproduce (video mudo o error). Se dejan como última opción. */
+const BAD_AUDIO = /\b(e?ac-?3|ddp?\s?[257]\.?[01]?|dd\+|dts(-?hd)?|truehd|atmos)\b/i;
 
 interface RawTorrentioResponse {
   streams?: RawTorrentioStream[];
@@ -38,6 +56,9 @@ function parseStream(raw: RawTorrentioStream): TorrentStream | null {
   const titleText = raw.title || "";
   const nameText = raw.name || "";
   const combined = `${nameText}\n${titleText}`;
+  const filename = raw.behaviorHints?.filename ?? "";
+  // El nombre del archivo va último: así la extensión queda al final del texto que se revisa.
+  if (UNPLAYABLE_VIDEO.test(`${combined}\n${filename}`)) return null;
 
   // Semillas: 👤 37
   const seedMatch = combined.match(/👤\s*(\d+)/);
@@ -104,9 +125,12 @@ function parseStream(raw: RawTorrentioStream): TorrentStream | null {
     isLatino: language === "latino" || language === "dual-latino",
     hasSpanishSubs: language === "sub-es",
     tagLabel,
-    rawTitle: combined,
+    rawTitle: `${combined}\n${filename}`,
   };
 }
+
+/** Los de audio que el navegador no reproduce van al final (dentro del mismo idioma). */
+export const badAudio = (s: TorrentStream) => (BAD_AUDIO.test(s.rawTitle) ? 1 : 0);
 
 export interface StreamOptions {
   isAnime?: boolean;
@@ -128,16 +152,20 @@ export async function getTorrentStreams(
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.streams;
 
-  const url = `${TORRENTIO_BASE}/stream/series/${encodeURIComponent(imdbId)}:${season}:${episode}.json`;
+  const url = `${TORRENTIO}/stream/series/${encodeURIComponent(imdbId)}:${season}:${episode}.json`;
 
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(10000),
       headers: { accept: "application/json" },
-      next: { revalidate: 3600 },
+      // Sin la caché de fetch de Next: podía guardar respuestas fallidas. Este módulo ya guarda 1 h las buenas.
+      cache: "no-store",
     });
     if (!res.ok) {
-      cache.set(key, { streams: [], at: Date.now() });
+      // Solo un 404 es "no hay torrents". Un 429 (demasiados pedidos) o un 5xx son pasajeros: guardarlos
+      // dejaba el episodio una hora como sin torrents aunque los tuviera.
+      if (res.status === 404) cache.set(key, { streams: [], at: Date.now() });
+      else console.warn(`[torrentio] ${res.status} en ${url}`);
       return [];
     }
 
@@ -149,7 +177,8 @@ export async function getTorrentStreams(
 
     let parsed = data.streams
       .map(parseStream)
-      .filter((s): s is TorrentStream => s !== null && s.seeders >= 0);
+      // Sin seeds el torrent nunca arranca (la tele esperaba 25 s para nada).
+      .filter((s): s is TorrentStream => s !== null && s.seeders >= 1);
 
     // Filtro estricto según preferencia del usuario
     if (isAnime) {
@@ -181,7 +210,7 @@ export async function getTorrentStreams(
     parsed.sort((a, b) => {
       const diff = priority(b) - priority(a);
       if (diff !== 0) return diff;
-      return b.seeders - a.seeders;
+      return badAudio(a) - badAudio(b) || b.seeders - a.seeders;
     });
 
     cache.set(key, { streams: parsed, at: Date.now() });
@@ -201,16 +230,20 @@ export async function getMovieTorrentStreams(imdbId: string, options?: StreamOpt
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.streams;
 
-  const url = `${TORRENTIO_BASE}/stream/movie/${encodeURIComponent(imdbId)}.json`;
+  const url = `${TORRENTIO}/stream/movie/${encodeURIComponent(imdbId)}.json`;
 
   try {
     const res = await fetch(url, {
       signal: AbortSignal.timeout(10000),
       headers: { accept: "application/json" },
-      next: { revalidate: 3600 },
+      // Sin la caché de fetch de Next: podía guardar respuestas fallidas. Este módulo ya guarda 1 h las buenas.
+      cache: "no-store",
     });
     if (!res.ok) {
-      cache.set(key, { streams: [], at: Date.now() });
+      // Solo un 404 es "no hay torrents". Un 429 (demasiados pedidos) o un 5xx son pasajeros: guardarlos
+      // dejaba el episodio una hora como sin torrents aunque los tuviera.
+      if (res.status === 404) cache.set(key, { streams: [], at: Date.now() });
+      else console.warn(`[torrentio] ${res.status} en ${url}`);
       return [];
     }
 
@@ -245,7 +278,7 @@ export async function getMovieTorrentStreams(imdbId: string, options?: StreamOpt
     parsed.sort((a, b) => {
       const diff = priority(b) - priority(a);
       if (diff !== 0) return diff;
-      return b.seeders - a.seeders;
+      return badAudio(a) - badAudio(b) || b.seeders - a.seeders;
     });
 
     cache.set(key, { streams: parsed, at: Date.now() });

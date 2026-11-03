@@ -23,7 +23,9 @@ declare global {
   var __p2pClient: WebTorrentInstance | undefined;
   var __p2pServer: unknown;
   var __p2pServerPort: number | undefined;
+  var __p2pServerStarting: Promise<number> | undefined;
   var __p2pLastUsed: Map<string, number> | undefined;
+  var __p2pPending: Map<string, Promise<Torrent>> | undefined;
 }
 
 function ensureCacheDir() {
@@ -68,11 +70,14 @@ export function getClient(): WebTorrentInstance {
 
 export async function getServerPort(): Promise<number> {
   if (globalThis.__p2pServerPort) return globalThis.__p2pServerPort;
+  // Varios pedidos a la vez (la tele en vivo pide el episodio, el de reserva y el próximo programa):
+  // todos esperan al mismo arranque. WebTorrent admite un solo servidor ("server already created").
+  if (globalThis.__p2pServerStarting) return globalThis.__p2pServerStarting;
 
   const client = getClient();
   const server = client.createServer({ origin: "*" });
 
-  return new Promise((resolve, reject) => {
+  const starting = new Promise<number>((resolve, reject) => {
     server.listen(0, () => {
       const addr = server.address();
       const port = typeof addr === "object" && addr ? addr.port : 0;
@@ -83,6 +88,9 @@ export async function getServerPort(): Promise<number> {
     });
     (server as unknown as { on?: (event: string, cb: (err: unknown) => void) => void }).on?.("error", reject);
   });
+  globalThis.__p2pServerStarting = starting;
+  starting.catch(() => (globalThis.__p2pServerStarting = undefined));
+  return starting;
 }
 
 /**
@@ -97,21 +105,20 @@ export async function ensureTorrentReady(infoHash: string, timeoutMs = 25000): P
 
   // client.torrents es un array síncrono con los torrents actuales
   const existing = client.torrents.find((t: Torrent) => t.infoHash === lowerHash);
-  if (existing) {
-    if (existing.ready) return existing;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("Timeout esperando metadatos")), timeoutMs);
-      existing.once("ready", () => {
-        clearTimeout(timer);
-        resolve(existing);
-      });
-      existing.once("error", (err: unknown) => {
-        clearTimeout(timer);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      });
-    });
-  }
+  if (existing?.ready) return existing;
 
+  // Pedidos simultáneos del mismo torrent (el video pide varios tramos al arrancar) comparten la misma
+  // espera: así ninguno lo agrega duplicado ni lo destruye mientras otro todavía lo está esperando.
+  if (!globalThis.__p2pPending) globalThis.__p2pPending = new Map();
+  const pending = globalThis.__p2pPending.get(lowerHash);
+  if (pending) return pending;
+
+  const adding = addTorrent(client, lowerHash, timeoutMs).finally(() => globalThis.__p2pPending?.delete(lowerHash));
+  globalThis.__p2pPending.set(lowerHash, adding);
+  return adding;
+}
+
+function addTorrent(client: WebTorrentInstance, lowerHash: string, timeoutMs: number): Promise<Torrent> {
   ensureCacheDir();
   const magnetOrHash = lowerHash.startsWith("magnet:") ? lowerHash : `magnet:?xt=urn:btih:${lowerHash}`;
 
@@ -120,14 +127,31 @@ export async function ensureTorrentReady(infoHash: string, timeoutMs = 25000): P
     const timer = setTimeout(() => {
       if (!resolved) {
         resolved = true;
+        // Limpiar el torrent que no encontró peers para no acumular zombies
+        try {
+          const stale = client.torrents.find((t: Torrent) => t.infoHash === lowerHash);
+          if (stale) stale.destroy();
+        } catch {
+          // Ignorar errores de limpieza
+        }
+        globalThis.__p2pLastUsed?.delete(lowerHash);
         reject(new Error(`[p2p] Timeout (${timeoutMs}ms) esperando torrent ${lowerHash}`));
       }
     }, timeoutMs);
 
-    const torrent = client.add(magnetOrHash, {
-      path: P2P_DIR,
-      announce: TRACKERS,
-    });
+    // Si ya estaba agregado (todavía sin metadatos), se espera ese mismo: agregarlo otra vez falla por duplicado.
+    const torrent =
+      client.torrents.find((t: Torrent) => t.infoHash === lowerHash) ??
+      client.add(magnetOrHash, {
+        path: P2P_DIR,
+        announce: TRACKERS,
+      });
+    if (torrent.ready) {
+      resolved = true;
+      clearTimeout(timer);
+      resolve(torrent);
+      return;
+    }
 
     torrent.once("ready", () => {
       if (!resolved) {
@@ -141,6 +165,9 @@ export async function ensureTorrentReady(infoHash: string, timeoutMs = 25000): P
       if (!resolved) {
         resolved = true;
         clearTimeout(timer);
+        // Limpiar torrent con error
+        try { torrent.destroy(); } catch { /* ignorar */ }
+        globalThis.__p2pLastUsed?.delete(lowerHash);
         reject(err instanceof Error ? err : new Error(String(err)));
       }
     });

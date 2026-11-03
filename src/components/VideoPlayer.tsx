@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import videojs from "video.js";
-import "video.js/dist/video-js.css";
+// Los estilos de video.js se cargan en app/layout.tsx (ver ahí por qué).
 import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { lcErrorMessages, type LcErrorCode, type LcStream } from "@/lib/lacartoons-types";
 import { getSavedVolume, saveVolume } from "@/lib/user-library";
@@ -109,6 +109,36 @@ const STREAMS_TIMEOUT_MS = 50_000;
 const SLOW_NOTICE_MS = 8000;
 /** Una fuente que no carga ni los datos del video en este tiempo se da por caída. */
 const LOAD_TIMEOUT_MS = 20_000;
+/**
+ * Las fuentes P2P tardan más en arrancar: el servidor espera hasta 25 s a que el torrent encuentre
+ * pares y recién ahí manda los primeros bytes. Con el tope común se descartaban justo antes de llegar.
+ */
+const P2P_LOAD_TIMEOUT_MS = 45_000;
+const isP2pStream = (stream: LcStream) => stream.url.startsWith("/api/p2p/");
+/**
+ * Un "episodio" más corto que esto es un video de reemplazo (sendvid devuelve un clip de 5 s cuando el
+ * original fue borrado): en la biblioteca se veían 5 segundos y en vivo la tele lo daba por terminado.
+ */
+const MIN_EPISODE_SECONDS = 60;
+
+/** Episodios ya informados en esta pestaña (cada uno se avisa una vez por resultado). */
+const reported = new Set<string>();
+/**
+ * Avisa al servidor si el episodio se pudo ver: la grilla de la programación se arma con los que andan
+ * (ver lib/episode-health.ts). Nunca molesta a la reproducción: si falla, se ignora.
+ */
+function reportEpisode(episodeId: string, ok: boolean) {
+    const key = `${episodeId}|${ok}`;
+    if (!episodeId || reported.has(key)) return;
+    reported.add(key);
+    const body = JSON.stringify({ id: episodeId, ok });
+    try {
+        if (navigator.sendBeacon?.("/api/episodios/estado", new Blob([body], { type: "application/json" }))) return;
+    } catch {
+        // Sigue con fetch.
+    }
+    fetch("/api/episodios/estado", { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
+}
 /** Un video trabado cargando (sin avanzar) este tiempo pasa a otra fuente. */
 const STALL_TIMEOUT_MS = 25_000;
 
@@ -267,6 +297,12 @@ export default function VideoPlayer({
 
         player.on("loadedmetadata", () => {
             window.clearTimeout(loadTimerRef.current);
+            const length = player.duration();
+            if (Number.isFinite(length) && length > 0 && length < MIN_EPISODE_SECONDS) {
+                player.pause();
+                failRef.current("La fuente tiene un video de reemplazo, no el episodio.");
+                return;
+            }
             // En vivo se suma lo que tardó en cargar, salvo que arranque desde el principio (capítulo que sigue a otro).
             const delay = isLive && pendingSeekRef.current > 0 ? (Date.now() - requestedAtRef.current) / 1000 : 0;
             const seek = pendingSeekRef.current + delay;
@@ -296,6 +332,7 @@ export default function VideoPlayer({
             clearWatchdogs();
             setPlaybackError("");
             if (activeEpisodeRef.current && activeEpisodeRef.current === episodeRef.current) {
+                reportEpisode(activeEpisodeRef.current, true);
                 callbacksRef.current.onPlaying?.(activeEpisodeRef.current);
             }
         });
@@ -474,7 +511,7 @@ export default function VideoPlayer({
 
         player.load();
         // Si en un rato no llegan ni los datos del video, la fuente se da por caída.
-        armWatchdog(loadTimerRef, LOAD_TIMEOUT_MS, () => failRef.current("La fuente de video no responde."));
+        armWatchdog(loadTimerRef, isP2pStream(selectedStream) ? P2P_LOAD_TIMEOUT_MS : LOAD_TIMEOUT_MS, () => failRef.current("La fuente de video no responde."));
     }, [selectedStream]);
 
     function selectStream(stream: LcStream) {
@@ -587,7 +624,9 @@ export default function VideoPlayer({
     // Todas las fuentes fallaron: se avisa para que la tele pruebe con otro episodio.
     const allFailed = streams.length > 0 && streams.every((s) => failedUrls.includes(s.url));
     useEffect(() => {
-        if (allFailed) callbacksRef.current.onUnavailable?.(episodeRef.current);
+        if (!allFailed) return;
+        reportEpisode(episodeRef.current, false);
+        callbacksRef.current.onUnavailable?.(episodeRef.current);
     }, [allFailed]);
 
     if (live) {

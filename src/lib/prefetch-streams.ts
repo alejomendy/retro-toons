@@ -39,9 +39,10 @@ function request(episodeId: string, priority: "high" | "low"): Promise<StreamsRe
   cache.set(episodeId, { at: Date.now(), promise });
   promise.then(
     (res) => {
-      // Errores y listas vacías no se guardan: la próxima vez se vuelve a probar.
-      const empty = Array.isArray((res.data as { streams?: unknown[] } | null)?.streams) && (res.data as { streams: unknown[] }).streams.length === 0;
-      if (res.status !== 200 || empty) cache.delete(episodeId);
+      // Errores, "sin fuentes" (success:false) y listas vacías no se guardan: la próxima vez se vuelve a probar.
+      const body = res.data as { success?: boolean; streams?: unknown[] } | null;
+      const empty = !Array.isArray(body?.streams) || body.streams.length === 0;
+      if (res.status !== 200 || body?.success !== true || empty) cache.delete(episodeId);
     },
     () => cache.delete(episodeId),
   );

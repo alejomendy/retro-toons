@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { channels, isChannelId } from "@/data/channels";
 import { lcErrorResponse } from "@/lib/lacartoons";
 import { getCachedSchedule } from "@/lib/lacartoons-schedule";
+import { warmUpcoming } from "@/lib/schedule-warmer";
 import type { LcSlot } from "@/lib/lacartoons-types";
 
 // El addon en el plan gratis de Render tarda hasta ~50 s en despertar.
@@ -31,11 +32,14 @@ export async function GET(req: NextRequest) {
     const grids: Record<string, LcSlot[] | null> = {};
     channels.forEach((c, i) => (grids[c.id] = results[i]?.slots ?? null));
     const complete = results.every((r) => r?.complete);
+    // En segundo plano se revisan los episodios de las próximas horas (ver lib/schedule-warmer.ts).
+    for (const r of results) if (r) warmUpcoming(r.slots, fecha);
     return NextResponse.json({ success: true, grids }, { headers: complete ? CACHED : UNCACHED });
   }
 
   try {
     const { slots, complete } = await getCachedSchedule(canal, fecha);
+    warmUpcoming(slots, fecha);
     return NextResponse.json({ success: true, canal, slots }, { headers: complete ? CACHED : UNCACHED });
   } catch (error) {
     return lcErrorResponse(error, "programación");

@@ -54,10 +54,15 @@ export async function GET(request: NextRequest, context: RouteContext) {
       headers: responseHeaders,
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    const isTimeout = msg.includes("Timeout") || msg.includes("timeout");
     console.error("[api/p2p] Error en streaming:", error);
     return NextResponse.json(
-      { error: "Error al iniciar stream P2P", details: error instanceof Error ? error.message : String(error) },
-      { status: 502 },
+      { error: "Error al iniciar stream P2P", details: msg },
+      {
+        status: isTimeout ? 503 : 502,
+        headers: isTimeout ? { "Retry-After": "0", "Cache-Control": "no-store" } : { "Cache-Control": "no-store" },
+      },
     );
   }
 }

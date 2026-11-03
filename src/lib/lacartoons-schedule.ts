@@ -7,6 +7,8 @@ import { getAvailableEpisodes, getFullEpisode, getPosters } from "./catalog";
 import { fetchCatalog, fetchGenres, fetchSeries, LcError } from "./lacartoons";
 import playableList from "@/data/playable.json";
 import { withArtwork } from "./artwork";
+import { healthBySeries, isDeadSeries, type SeriesHealth } from "./episode-health";
+import { episodeTorrents, resolveSeriesImdb } from "./series-imdb";
 import type { LcSeries, LcSeriesSummary, LcSlot } from "./lacartoons-types";
 import type { ChannelId, Show, VideoSource } from "./types";
 
@@ -171,6 +173,152 @@ function shuffled<T>(list: T[], random: () => number): T[] {
 
 const unique = <T,>(list: T[]) => [...new Set(list)];
 
+/** Toda la serie mezclada con semilla (índices de `list`), sin los episodios que ya se sabe que no tienen video. */
+function episodeOrder<T>(list: T[], idOf: (item: T) => string, health: SeriesHealth | undefined, seed: string): number[] {
+  const all = list.map((_, i) => i);
+  const notBad = all.filter((i) => !health?.bad.has(idOf(list[i])));
+  return shuffled(notBad.length > 0 ? notBad : all, seededRandom(hash(seed)));
+}
+
+/** Con tantos episodios ya vistos sin problemas, el principal sale solo de esos (igual hay variedad). */
+const VERIFIED_ONLY_FROM = 20;
+
+/**
+ * Elige los episodios de un espacio, como índices de `list`: el principal y los de reserva.
+ *
+ * - Variedad: se mezcla toda la serie (con semilla: mismo día, misma grilla para todos), así no se pasan
+ *   siempre las mismas temporadas. La n-ésima vez que la serie va en el día toma el n-ésimo de la mezcla,
+ *   sin repetir episodios en el día.
+ * - Que se vea: los que ya se sabe que no tienen video no se eligen, y las reservas son primero
+ *   episodios que ya se vieron sin problemas (si el principal falla, la tele pasa a uno que anda).
+ */
+function pickEpisodes<T>(list: T[], idOf: (item: T) => string, health: SeriesHealth | undefined, seed: string, nth: number): number[] {
+  const order = episodeOrder(list, idOf, health, seed);
+  const verified = order.filter((i) => health?.ok.has(idOf(list[i])));
+  const verifiedOrder = shuffled(verified, seededRandom(hash(`${seed}|ok`)));
+  const mainFrom = verifiedOrder.length >= VERIFIED_ONLY_FROM ? verifiedOrder : order;
+  const main = mainFrom[nth % mainFrom.length];
+  const rest = [...verifiedOrder, ...order.slice((nth % order.length) + 1), ...order];
+  return unique([main, ...rest]).slice(0, 1 + MORE_EPISODES);
+}
+
+/** Episodios que se prueban en Torrentio por espacio (el sorteado incluido) antes de quedarse con el sorteado. */
+const P2P_TRIES = 4;
+/** Una serie que no tuvo torrents en español en tantos intentos seguidos no se sigue probando ese día. */
+const P2P_GIVE_UP_AFTER = 6;
+/** Pedidos a Torrentio a la vez, entre todos los canales (se arman juntos): que no nos limite. */
+const P2P_CONCURRENCY = 6;
+
+let p2pRunning = 0;
+const p2pWaiting: (() => void)[] = [];
+async function withP2pSlot<T>(task: () => Promise<T>): Promise<T> {
+  if (p2pRunning >= P2P_CONCURRENCY) await new Promise<void>((resolve) => p2pWaiting.push(resolve));
+  p2pRunning++;
+  try {
+    return await task();
+  } finally {
+    p2pRunning--;
+    p2pWaiting.shift()?.();
+  }
+}
+
+type EpisodeRef = LcSlot["episode"];
+const refOf = (v: { id: string; title: string; season: number; episode: number }): EpisodeRef => ({ id: v.id, title: v.title, season: v.season, episode: v.episode });
+
+/**
+ * Dentro de cada serie, prefiere episodios con torrent en español: P2P arranca en 1-2 s y trae el
+ * episodio completo, mientras LACartoons tarda hasta 30 s y muchos hosts están caídos. No cambia qué
+ * series van en cada espacio, solo qué episodio. Los que ya se sabe que andan no se tocan.
+ *
+ * Aprende por temporada: los torrents en español suelen venir por temporada, así que primero se prueban
+ * episodios de las temporadas que ya tuvieron (igual se verifica cada uno: no todos los episodios de una
+ * temporada tienen) y no se prueban las que no tuvieron ninguno. Cuando el sorteado no tiene torrent, se
+ * busca otro de una temporada que sí, repartiendo entre ellas (la que menos salió en el día) para no
+ * pasar siempre la misma. El sorteado queda de reserva.
+ */
+async function preferP2pEpisodes(slots: LcSlot[], loaded: Map<string, LcSeries>, health: Map<string, SeriesHealth>, day: number): Promise<Set<string>> {
+  /** Series con al menos un episodio con torrent en español. */
+  const withP2p = new Set<string>();
+  const bySeries = new Map<string, LcSlot[]>();
+  for (const slot of slots) {
+    if (slot.external || !loaded.has(slot.series.id)) continue;
+    const list = bySeries.get(slot.series.id) ?? [];
+    list.push(slot);
+    bySeries.set(slot.series.id, list);
+  }
+
+  await Promise.all(
+    [...bySeries].map(async ([key, list]) => {
+      const { imdbId, isAnime } = await resolveSeriesImdb(key).catch(() => ({ imdbId: null, isAnime: false }));
+      if (!imdbId) return;
+      if (await preferForSeries(key, list, imdbId, isAnime).catch(() => false)) withP2p.add(key);
+    }),
+  );
+  return withP2p;
+
+  /** Devuelve si la serie tiene algún episodio con torrent en español. */
+  async function preferForSeries(key: string, list: LcSlot[], imdbId: string, isAnime: boolean): Promise<boolean> {
+    const videos = loaded.get(key)!.videos;
+    const h = health.get(key);
+    const order = episodeOrder(videos, (v) => v.id, h, `${key}|${day}|p2p`).map((i) => videos[i]);
+    const used = new Set(list.map((s) => s.episode.id));
+    const goodSeasons = new Set<number>();
+    const badSeasons = new Set<number>();
+    const seasonUses = new Map<number, number>();
+    let misses = 0;
+
+    const hasP2p = async (v: EpisodeRef) => {
+      const found = await withP2pSlot(() => episodeTorrents(imdbId, v.season, v.episode, { isAnime })).then(
+        (t) => t.length > 0,
+        () => false,
+      );
+      if (found) {
+        goodSeasons.add(v.season);
+        badSeasons.delete(v.season);
+      } else {
+        misses++;
+        if (!goodSeasons.has(v.season)) badSeasons.add(v.season);
+      }
+      return found;
+    };
+    const countSeason = (v: EpisodeRef) => seasonUses.set(v.season, (seasonUses.get(v.season) ?? 0) + 1);
+    /** Próximo candidato: de una temporada buena (la menos usada hoy) o, si no hay, de una sin probar. */
+    const nextCandidate = () => {
+      const free = order.filter((v) => !used.has(v.id));
+      const good = free.filter((v) => goodSeasons.has(v.season));
+      if (good.length > 0) return good.reduce((a, b) => ((seasonUses.get(b.season) ?? 0) < (seasonUses.get(a.season) ?? 0) ? b : a));
+      return free.find((v) => !badSeasons.has(v.season));
+    };
+
+    for (const slot of list) {
+      if (h?.ok.has(slot.episode.id)) {
+        countSeason(slot.episode);
+        continue;
+      }
+      // Una serie sin torrents en español en sus primeros intentos no se sigue probando.
+      if (goodSeasons.size === 0 && misses >= P2P_GIVE_UP_AFTER) return false;
+      // El sorteado se prueba salvo que su temporada ya se sepa que no tiene.
+      if (!badSeasons.has(slot.episode.season) && (await hasP2p(slot.episode))) {
+        countSeason(slot.episode);
+        continue;
+      }
+      for (let tries = 1; tries < P2P_TRIES; tries++) {
+        const candidate = nextCandidate();
+        if (!candidate) break;
+        used.add(candidate.id);
+        if (!(await hasP2p(candidate))) continue;
+        const drawn = slot.episode;
+        slot.episode = refOf(candidate);
+        countSeason(candidate);
+        // Las reservas que ya se sabe que andan se mantienen primero; el sorteado va al final.
+        slot.more = [...(slot.more ?? []).filter((m) => m.id !== candidate.id).slice(0, MORE_EPISODES - 1), drawn];
+        break;
+      }
+    }
+    return goodSeasons.size > 0;
+  }
+}
+
 /**
  * ¿La serie tiene video reproducible? Con la integración de Torrentio P2P, las series
  * cuentan con respaldo garantizado en español latino aunque el addon de LACartoons falle.
@@ -235,6 +383,8 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
   const catalog = (await fullCatalog()).map((series) => ({ series, key: normalize(series.name) }));
   // La programación cambia según el día de la semana (franjas de lunes a viernes, sábado y domingo).
   const blocks = blocksForDay(channel, date.getDay());
+  // Lo que ya se sabe de cada episodio (se pudo ver / no tiene video): ver lib/episode-health.ts.
+  const health = healthBySeries();
 
   // Series icónicas de cada bloque: las que están en LACartoons van por su ID;
   // las que no, quedan como candidatas a una fuente legal propia (ver lib/catalog.ts).
@@ -263,7 +413,8 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
     failed += result.failed;
     for (const s of result.series) {
       if (!s || s.videos.length === 0) continue;
-      if (isPlayable(s)) loaded.set(s.id, s);
+      // Una serie que ya falló varias veces y nunca anduvo no entra: pasa a su fuente propia, si tiene.
+      if (isPlayable(s) && !isDeadSeries(health.get(s.id))) loaded.set(s.id, s);
       else unplayable.add(s.id);
     }
   };
@@ -280,7 +431,7 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
       .map(async (key) => {
         const show = showById[key.slice(EXTERNAL.length)];
         // Episodios cortos (segmentos de 7-11 min) dejarían casi todo el espacio en tanda.
-        if (show.episodeMinutes < MIN_EXTERNAL_MINUTES) return;
+        if (show.episodeMinutes < MIN_EXTERNAL_MINUTES || isDeadSeries(health.get(show.id))) return;
         const numbers = await getAvailableEpisodes(show).catch((): number[] => {
         failed++;
         return [];
@@ -304,9 +455,26 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
   if (channelPool.length === 0) throw new LcError("NO_EPISODES", `No encontramos episodios de ${channel.name} para hoy.`);
 
   const slots: LcSlot[] = [];
-  /** Espacios de fuentes externas: se completan después con el episodio y su video. */
-  const pending: { slot: LcSlot; show: Show; number: number }[] = [];
+  /**
+   * Espacios de fuentes externas: se completan después con el episodio y su video. `fallback` son las
+   * series de LACartoons del mismo bloque, por si al final el externo no tiene video.
+   */
+  const pending: { slot: LcSlot; show: Show; number: number; fallback: string[] }[] = [];
   const airedToday = new Map<string, number>();
+
+  /** Espacio con un episodio de LACartoons, elegido de toda la serie (ver pickEpisodes). */
+  const lcSlot = (time: Pick<LcSlot, "start" | "end" | "block">, key: string): LcSlot => {
+    const nth = airedToday.get(key) ?? 0;
+    airedToday.set(key, nth + 1);
+    const series = loaded.get(key)!;
+    const [ep, ...more] = pickEpisodes(series.videos, (v) => v.id, health.get(key), `${key}|${day}`, nth).map((i) => series.videos[i]);
+    return {
+      ...time,
+      series: { id: series.id, name: series.name, poster: series.poster },
+      episode: { id: ep.id, title: ep.title, season: ep.season, episode: ep.episode },
+      more: more.map((m) => ({ id: m.id, title: m.title, season: m.season, episode: m.episode })),
+    };
+  };
 
   blocks.forEach((block, b) => {
     const own = blockKeys[b].filter(playable);
@@ -318,17 +486,18 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
     // Como en la tele: de lunes a domingo cada franja mantiene su orden (cada serie en su horario)
     // y se renueva la semana siguiente. Los episodios sí avanzan todos los días.
     const offset = (week + b) % pool.length;
+    // Reemplazos de LACartoons para los externos sin video: primero las del bloque, si no las del canal.
+    const fallback = unique([...pool, ...channelPool]).filter((k) => loaded.has(k));
     for (let t = toMinutes(block.start), i = 0; t < end; t += length, i++) {
       const key = pool[(offset + (block.double ? Math.floor(i / 2) : i)) % pool.length];
-      const nth = airedToday.get(key) ?? 0;
-      airedToday.set(key, nth + 1);
-      // Las repeticiones avanzan día a día por la lista real de episodios.
-      const pick = (count: number) => (day * 7 + nth) % count;
       const time = { start: t, end: Math.min(t + length, end), block: block.name };
 
       const ext = external.get(key);
       if (ext) {
-        const number = ext.numbers[pick(ext.numbers.length)];
+        const nth = airedToday.get(key) ?? 0;
+        airedToday.set(key, nth + 1);
+        const [n] = pickEpisodes(ext.numbers, (num) => `${ext.show.id}:${num}`, health.get(ext.show.id), `${key}|${day}`, nth);
+        const number = ext.numbers[n];
         const slot: LcSlot = {
           ...time,
           series: { id: ext.show.id, name: ext.show.title, poster: null },
@@ -336,30 +505,28 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
           external: { minutes: ext.show.episodeMinutes, via: "" },
         };
         slots.push(slot);
-        pending.push({ slot, show: ext.show, number });
+        // Rotada según el espacio: dos externos seguidos sin video no caen en la misma serie.
+        pending.push({ slot, show: ext.show, number, fallback: fallback.map((_, k) => fallback[(i + k) % fallback.length]) });
         continue;
       }
 
-      const series = loaded.get(key)!;
-      const index = pick(series.videos.length);
-      const ep = series.videos[index];
-      const more = Array.from({ length: Math.min(MORE_EPISODES, series.videos.length - 1) }, (_, k) => series.videos[(index + 1 + k) % series.videos.length]);
-      slots.push({
-        ...time,
-        series: { id: series.id, name: series.name, poster: series.poster },
-        episode: { id: ep.id, title: ep.title, season: ep.season, episode: ep.episode },
-        more: more.map((m) => ({ id: m.id, title: m.title, season: m.season, episode: m.episode })),
-      });
+      slots.push(lcSlot(time, key));
     }
   });
 
   // Título en español, temporada y video de cada episodio externo (TMDB + canal oficial / Pluto TV).
   const posters = await getPosters(unique(pending.map((p) => p.show))).catch((): Record<string, string> => ({}));
+  /** Externos que al final no tienen video: en la tele quedaban 30 minutos de estática. */
+  const noVideo: (typeof pending)[number][] = [];
   await Promise.all(
-    pending.map(async ({ slot, show, number }) => {
+    pending.map(async (entry) => {
+      const { slot, show, number } = entry;
       const ep = await getFullEpisode(show, number).catch(() => null);
       slot.series.poster = posters[show.id] ?? null;
-      if (!ep) return;
+      if (!ep?.source) {
+        noVideo.push(entry);
+        return;
+      }
       slot.episode = {
         id: slot.episode.id,
         // getFullEpisode antepone "T1·E2 — " al título; acá la temporada se muestra aparte.
@@ -370,7 +537,39 @@ async function buildLcSchedule(channelId: ChannelId, date: Date): Promise<{ slot
       slot.external = { source: ep.source, minutes: Math.min(ep.minutes, show.episodeMinutes) || show.episodeMinutes, url: externalUrl(ep.source), via: sourceName(ep.source) };
     }),
   );
+  // Se reemplazan por una serie de LACartoons del bloque o del canal (en orden de horario, para que las
+  // repeticiones avancen igual que el resto). Sin ninguna de LACartoons, queda el externo como estaba.
+  for (const { slot, fallback } of noVideo.sort((x, y) => x.slot.start - y.slot.start)) {
+    const at = slots.indexOf(slot);
+    const around = [slots[at - 1]?.series.id, slots[at + 1]?.series.id];
+    const key = fallback.find((k) => !around.includes(k)) ?? fallback[0];
+    if (key) slots[slots.indexOf(slot)] = lcSlot({ start: slot.start, end: slot.end, block: slot.block }, key);
+  }
 
+  const withP2p = await preferP2pEpisodes(slots, loaded, health, day);
+
+  // Solo español: una serie sin torrents en español, sin ningún episodio que haya andado y con alguno
+  // confirmado sin video no se programa (pasaría la placa de "sin señal"). Su espacio lo toma otra serie
+  // del mismo bloque que sí tenga fuente; si el bloque no tiene, una del canal.
+  const hasSource = (key: string) => withP2p.has(key) || (health.get(key)?.ok.size ?? 0) > 0;
+  const noSource = (key: string) => !hasSource(key) && (health.get(key)?.bad.size ?? 0) > 0;
+  const channelWithSource = unique(slots.filter((s) => !s.external && loaded.has(s.series.id) && hasSource(s.series.id)).map((s) => s.series.id));
+  let replaced = 0;
+  slots.forEach((slot, at) => {
+    if (slot.external || !noSource(slot.series.id)) return;
+    const inBlock = unique(slots.filter((s) => s.block === slot.block && !s.external && hasSource(s.series.id)).map((s) => s.series.id));
+    const options = inBlock.length > 0 ? inBlock : channelWithSource;
+    const around = [slots[at - 1]?.series.id, slots[at + 1]?.series.id];
+    // La que menos salió en el día, que no sea la de al lado.
+    const leastAired = [...options].sort((a, b) => (airedToday.get(a) ?? 0) - (airedToday.get(b) ?? 0));
+    const key = leastAired.find((k) => !around.includes(k)) ?? leastAired[0];
+    if (!key) return;
+    slots[at] = lcSlot({ start: slot.start, end: slot.end, block: slot.block }, key);
+    replaced++;
+  });
+  // Los reemplazos salen con un episodio sorteado: se vuelve a pasar para que también prefieran P2P
+  // (lo ya consultado a Torrentio queda en caché, así que es rápido).
+  if (replaced > 0) await preferP2pEpisodes(slots, loaded, health, day);
   return { slots, failed };
 }
 
@@ -540,39 +739,48 @@ export async function getGenres(): Promise<string[]> {
   return unique(["Cartoon Network", "Nickelodeon", "Fox Kids", "Disney", "Warner Channel", "Animes", ...fromCache]);
 }
 
+/** Cada cuánto se rearma la grilla con lo aprendido de los episodios (los que andan y los que no). */
+const GRID_REFRESH_SECONDS = 60 * 60;
+
 /**
- * Grilla en caché por canal y día. Es determinística, así que se guarda hasta que cambie la lista
- * de series con video (data/playable.json se actualiza cada semana).
+ * Grilla en caché por canal y día. Se rearma cada hora para usar lo que se aprendió de los episodios
+ * (lib/episode-health.ts): los que no tienen video dejan de salir y los que andan quedan de reserva.
  */
 const cachedSchedule = unstable_cache(
   async (channelId: ChannelId, fecha: string) => {
     const [y, m, d] = fecha.split("-").map(Number);
     return getLcSchedule(channelId, new Date(y, m - 1, d));
   },
-  ["lacartoons-schedule-v4", String(playableList.checkedAt ?? "sin-lista")],
-  { revalidate: 7 * 24 * 60 * 60 },
+  ["lacartoons-schedule-v15", String(playableList.checkedAt ?? "sin-lista")],
+  { revalidate: GRID_REFRESH_SECONDS },
 );
 
-const gridMemory = new Map<string, { slots: LcSlot[]; at: number }>();
-const GRID_MEM_MS = 2 * 60 * 60 * 1000;
+const gridMemory = new Map<string, { slots: LcSlot[]; at: number; complete: boolean }>();
+const GRID_MEM_MS = GRID_REFRESH_SECONDS * 1000;
+/** Una grilla incompleta (el addon no respondió) se reusa poco: así se vuelve a armar en cuanto el addon vuelve. */
+const DEGRADED_MEM_MS = 5 * 60 * 1000;
 
-/** Grilla del día: completa o degradada, guardada en memoria y CDN para acceso ultra rápido. */
+/**
+ * Grilla del día, guardada en memoria para acceso ultra rápido. Si salió incompleta se informa
+ * `complete: false` para que la API no la deje en la CDN.
+ */
 export async function getCachedSchedule(channelId: ChannelId, fecha: string): Promise<{ slots: LcSlot[]; complete: boolean }> {
   const key = `${channelId}:${fecha}`;
   const hit = gridMemory.get(key);
-  if (hit && Date.now() - hit.at < GRID_MEM_MS) {
-    return { slots: hit.slots, complete: true };
+  if (hit && Date.now() - hit.at < (hit.complete ? GRID_MEM_MS : DEGRADED_MEM_MS)) {
+    return { slots: hit.slots, complete: hit.complete };
   }
   try {
     const slots = await cachedSchedule(channelId, fecha);
-    gridMemory.set(key, { slots, at: Date.now() });
+    gridMemory.set(key, { slots, at: Date.now(), complete: true });
     return { slots, complete: true };
   } catch (e) {
     if (e instanceof DegradedSchedule) {
-      gridMemory.set(key, { slots: e.slots, at: Date.now() });
-      return { slots: e.slots, complete: true };
+      gridMemory.set(key, { slots: e.slots, at: Date.now(), complete: false });
+      return { slots: e.slots, complete: false };
     }
-    if (hit) return { slots: hit.slots, complete: true };
+    // El addon falló del todo: mejor la última grilla conocida (aunque esté vencida) que ninguna.
+    if (hit) return { slots: hit.slots, complete: false };
     throw e;
   }
 }

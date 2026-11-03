@@ -45,3 +45,6 @@ next-env.d.ts
 # p2p cache
 .p2p-cache/
 
+
+# registro de episodios que se pueden ver (lib/episode-health.ts)
+.retrotoons-cache/

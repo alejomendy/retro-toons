@@ -1,56 +1,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { fetchStreamsCached } from "@/lib/lacartoons";
-import { showById } from "@/data/shows";
-import playableList from "@/data/playable.json";
-import { getImdbIdFromTmdb, findImdbId } from "@/lib/imdb";
-import { getTorrentStreams } from "@/lib/torrentio";
+import { episodeTorrents, resolveSeriesImdb } from "@/lib/series-imdb";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /** Tope para encontrar señal: después se responde lo que haya. */
-const BUDGET_MS = 30_000;
+const BUDGET_MS = 50_000;
 /**
  * Concurrencia de búsqueda: 3 trabajadores en paralelo.
  */
 const CONCURRENCY = 3;
 const MAX_IDS = 16;
-/** Espera máxima por cada episodio antes de probar el siguiente. */
-const CANDIDATE_MS = 5_000;
+/**
+ * Espera máxima por cada episodio de LACartoons antes de probar el siguiente. El addon tarda 15-30 s en
+ * extraer algunos hosts: con 5 s se daban por "sin señal" episodios que en la biblioteca andan. La búsqueda
+ * sigue en segundo plano y queda en caché.
+ */
+const CANDIDATE_MS = 30_000;
 
 /** "lacart_282:1:12" → "lacart_282". */
 const seriesOf = (id: string) => id.split(":")[0];
-
-/** Caché de IMDb IDs para evitar llamar a TMDB en cada prueba de señal. */
-const imdbResolved = new Map<string, { imdbId: string | null; isAnime: boolean }>();
-
-async function resolveImdb(seriesId: string): Promise<{ imdbId: string | null; isAnime: boolean }> {
-  const cached = imdbResolved.get(seriesId);
-  if (cached) return cached;
-
-  let isAnime = false;
-  let imdbId: string | null = null;
-
-  const local = showById[seriesId];
-  if (local) {
-    isAnime = local.genre?.toLowerCase().includes("anime") || (local.channels && local.channels.length === 0);
-    if (local.tmdbId) {
-      imdbId = await getImdbIdFromTmdb(local.tmdbId);
-    } else {
-      imdbId = await findImdbId(local.originalTitle || local.title, local.year);
-    }
-  } else {
-    const pName = (playableList.series as Record<string, { name: string } | undefined>)[seriesId]?.name;
-    if (pName) {
-      isAnime = /dragon ball|saint seiya|caballeros|sailor moon|ranma|pokemon|digimon|evangelion|inuyasha|sakura|yugioh|yu-gi-oh|slam dunk|samurai x|samurai champloo|cowboy bebop|trigun|zatch|shaman|beyblade|medabots|detective conan|mazinger|attack on titan|shingeki|demon slayer|kimetsu|jujutsu|hunter x hunter|bleach|naruto|one piece/i.test(pName);
-      imdbId = await findImdbId(pName);
-    }
-  }
-
-  const result = { imdbId, isAnime };
-  imdbResolved.set(seriesId, result);
-  return result;
-}
 
 /**
  * Verifica si un episodio tiene torrents activos en Torrentio P2P con audio latino o subtítulos en español.
@@ -62,10 +32,10 @@ async function hasP2pStreams(id: string): Promise<boolean> {
     const season = parts.length >= 3 ? Number.parseInt(parts[1], 10) || 1 : 1;
     const episode = parts.length >= 3 ? Number.parseInt(parts[2], 10) || 1 : Number.parseInt(parts[1], 10) || 1;
 
-    const { imdbId, isAnime } = await resolveImdb(seriesId);
+    const { imdbId, isAnime } = await resolveSeriesImdb(seriesId);
     if (!imdbId) return false;
 
-    const torrents = await getTorrentStreams(imdbId, season, episode, { isAnime });
+    const torrents = await episodeTorrents(imdbId, season, episode, { isAnime });
     return torrents.length > 0;
   } catch {
     return false;

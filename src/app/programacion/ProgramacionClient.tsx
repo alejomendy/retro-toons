@@ -131,22 +131,8 @@ export default function ProgramacionClient({ channelId, explicit }: { channelId:
     setLastChannel(channelId);
     recordChannelVisit(channelId, channels.length);
   }, [channelId]);
-  // Con el control remoto lo más probable es ir al canal de al lado: se dejan listas sus fuentes.
-  const onAir = useOnAir();
-  const neighborIds = (() => {
-    const i = channels.findIndex((c) => c.id === channelId);
-    return [channels[(i + 1) % channels.length].id, channels[(i - 1 + channels.length) % channels.length].id];
-  })();
-  const neighborEpisodes = onAir
-    .filter((o) => neighborIds.includes(o.channel.id) && o.current && !o.current.external)
-    .map((o) => o.current!.episode.id)
-    .join(",");
-  useEffect(() => {
-    if (!neighborEpisodes) return;
-    // Después de lo que sigue en este canal (que se pide a los 5 s de arrancar): los vecinos van atrás en la fila.
-    const id = window.setTimeout(() => neighborEpisodes.split(",").forEach((id) => prefetchStreams(id)), 20_000);
-    return () => window.clearTimeout(id);
-  }, [neighborEpisodes]);
+  // No se precargan los canales vecinos: el addon de LACartoons extrae los videos de a uno (un solo
+  // Chromium) y cada precarga lo ocupaba hasta 30 s, dejando esperando al episodio que se está mirando.
 
   return (
     <div className="space-y-6">
@@ -454,6 +440,13 @@ function LiveTv({
   const slotKeyRef = useRef(slotKey);
   slotKeyRef.current = slotKey;
   const searchingRef = useRef<string | null>(null);
+  // Ningún episodio de la serie tiene señal: en vez de dejar la placa el resto del espacio, se adelanta
+  // el próximo programa (igual que cuando un capítulo termina antes de hora). Sin próximo, la placa reintenta.
+  const giveUp = useCallback(() => {
+    const left = (slot.end - minutesNow(new Date())) * 60;
+    if (nextSlotKey && left > SHORT_BREAK_SECONDS) setPlay({ key: slotKey, pick, startAt: 0, early: nextSlotKey, follows: true });
+    else setEndedKey(slotKey);
+  }, [slot.end, nextSlotKey, slotKey, pick]);
   const handleUnavailable = useCallback(
     (id: string) => {
       // El reproductor puede avisar dos veces (sin fuentes y todas fallaron): se busca una sola vez.
@@ -465,7 +458,7 @@ function LiveTv({
       }
       const rest = lineup.slice(pick + 1).map((x) => x.episode.id);
       if (rest.length === 0) {
-        setEndedKey(slotKey);
+        giveUp();
         return;
       }
       searchingRef.current = playKey;
@@ -474,13 +467,13 @@ function LiveTv({
         if (slotKeyRef.current !== slotKey) return;
         const next = found ? lineup.findIndex((x) => x.episode.id === found) : -1;
         if (next < 0) {
-          setEndedKey(slotKey);
+          giveUp();
           return;
         }
         setPlay({ key: slotKey, pick: next, startAt: play.startAt === 0 && pick > 0 ? 0 : secondsIntoSlot(slot) });
       });
     },
-    [episode.id, early, pick, lineup, slotKey, playKey, slot, play.startAt],
+    [episode.id, early, pick, lineup, slotKey, playKey, slot, play.startAt, giveUp],
   );
   // Al terminar, nunca una tanda larga: sigue otro capítulo de la serie o se adelanta el próximo programa.
   const handleEnded = useCallback(

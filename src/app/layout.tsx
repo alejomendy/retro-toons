@@ -3,6 +3,10 @@ import { Bungee, Nunito, VT323 } from "next/font/google";
 import Header from "@/components/Header";
 import { BottomNav } from "@/components/NavLinks";
 import AchievementToast from "@/components/AchievementToast";
+// Los estilos de video.js van acá y no en components/VideoPlayer.tsx: ese componente se carga con
+// next/dynamic y Next a veces descarta el CSS de esos chunks al navegar, dejando el reproductor sin
+// estilos (controles como texto suelto, video en una esquina, modo cine roto).
+import "video.js/dist/video-js.css";
 import "./globals.css";
 
 const display = Bungee({ variable: "--font-display", weight: "400", subsets: ["latin"] });
