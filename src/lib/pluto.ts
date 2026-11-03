@@ -9,10 +9,14 @@ import type { FreeOption } from "@/lib/types";
  *   - Stream HLS de cada episodio, para verlo en nuestro reproductor a través
  *     de /api/hls. Los cortes publicitarios de Pluto van incluidos en el stream.
  *
- * La región sale de la IP del servidor (desde Latinoamérica: catálogo "latam", con el doblaje latino).
- * Por eso en Vercel las funciones corren en São Paulo (vercel.json, región gru1): desde la región por
- * defecto, en EE. UU., Pluto daba su catálogo de allá (ej. Inuyasha en japonés).
+ * La región sale de la IP del pedido: desde EE. UU. Pluto da su catálogo de allá (ej. Inuyasha en japonés)
+ * y desde Brasil el brasileño (en portugués). Vercel no tiene servidores en ningún país de habla hispana,
+ * así que se le declara una IP de México con X-Forwarded-For, que Pluto respeta: así entrega la región
+ * latina en español ("VE") esté donde esté el servidor. Se puede cambiar con PLUTO_CLIENT_IP.
  */
+const CLIENT_IP = process.env.PLUTO_CLIENT_IP?.trim() || "187.188.10.10";
+/** Encabezados para todo pedido a Pluto (también el proxy HLS): fijan la región latina. */
+export const PLUTO_HEADERS = { "X-Forwarded-For": CLIENT_IP };
 const ONE_HOUR = 60 * 60;
 const ONE_DAY = 24 * ONE_HOUR;
 const WEB = "https://pluto.tv/latam";
@@ -39,13 +43,13 @@ const getSession = unstable_cache(
       // Publicidad incluida en el stream: Pluto se financia así.
       serverSideAds: "true",
     });
-    const res = await fetch(`https://boot.pluto.tv/v4/start?${qs}`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`https://boot.pluto.tv/v4/start?${qs}`, { headers: PLUTO_HEADERS, cache: "no-store", signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error(`[pluto] boot ${res.status}`);
     const boot = (await res.json()) as { sessionToken?: string; stitcherParams?: string; servers?: { stitcher?: string } };
     if (!boot.sessionToken || !boot.servers?.stitcher) throw new Error("[pluto] sesión incompleta");
     return { token: boot.sessionToken, stitcher: boot.servers.stitcher, stitcherParams: boot.stitcherParams ?? "" };
   },
-  ["pluto-session-latam"],
+  ["pluto-session-es"],
   { revalidate: ONE_HOUR },
 );
 
@@ -57,7 +61,7 @@ function streamUrl({ token, stitcher, stitcherParams }: Session, path: string): 
 
 async function pluto<T>(url: string): Promise<T> {
   const { token } = await getSession();
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(8000) });
+  const res = await fetch(url, { headers: { ...PLUTO_HEADERS, Authorization: `Bearer ${token}` }, cache: "no-store", signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`[pluto] ${res.status} en ${url}`);
   return (await res.json()) as T;
 }
@@ -72,7 +76,7 @@ interface SearchItem {
 const search = unstable_cache(
   async (q: string) =>
     (await pluto<{ data?: SearchItem[] }>(`https://service-media-search.clusters.pluto.tv/v1/search?q=${encodeURIComponent(q)}&limit=20`)).data ?? [],
-  ["pluto-search-latam"],
+  ["pluto-search-es"],
   { revalidate: ONE_DAY },
 );
 
@@ -187,7 +191,7 @@ const seriesEpisodes = unstable_cache(
       })),
     );
   },
-  ["pluto-series-episodes-latam"],
+  ["pluto-series-episodes-es"],
   { revalidate: ONE_DAY },
 );
 

@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { PLUTO_HEADERS } from "@/lib/pluto";
 
 /**
  * GET /api/hls?u=<url .m3u8 de Pluto TV>
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
     return new Response("Origen no permitido", { status: 403 });
   }
 
-  const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(10000) }).catch(() => null);
+  const res = await fetch(url, { headers: PLUTO_HEADERS, cache: "no-store", signal: AbortSignal.timeout(10000) }).catch(() => null);
   if (!res?.ok) return new Response("No se pudo obtener la lista", { status: 502 });
 
   const body = await res.text();
