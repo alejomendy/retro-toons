@@ -659,7 +659,7 @@ const GENRE_BY_CHANNEL: Record<ChannelId, string> = {
 const EXTERNAL_WAIT_MS = 3000;
 
 /** Series de YouTube oficial y Pluto TV: armar la lista prueba cada fuente, así que va en su propia caché. */
-const cachedExternalSeries = unstable_cache(() => getExternalSeries(), ["retrotoons-external-series-v2"], { revalidate: CACHE_SECONDS / 2 });
+const cachedExternalSeries = unstable_cache(() => getExternalSeries(), ["retrotoons-external-series-v3"], { revalidate: CACHE_SECONDS / 2 });
 
 /**
  * Una sola biblioteca: el catálogo de LACartoons más las series de otras fuentes, cada una en la

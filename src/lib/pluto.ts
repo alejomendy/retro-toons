@@ -9,7 +9,9 @@ import type { FreeOption } from "@/lib/types";
  *   - Stream HLS de cada episodio, para verlo en nuestro reproductor a través
  *     de /api/hls. Los cortes publicitarios de Pluto van incluidos en el stream.
  *
- * La región sale de la IP del servidor (desde Latinoamérica: catálogo "latam").
+ * La región sale de la IP del servidor (desde Latinoamérica: catálogo "latam", con el doblaje latino).
+ * Por eso en Vercel las funciones corren en São Paulo (vercel.json, región gru1): desde la región por
+ * defecto, en EE. UU., Pluto daba su catálogo de allá (ej. Inuyasha en japonés).
  */
 const ONE_HOUR = 60 * 60;
 const ONE_DAY = 24 * ONE_HOUR;
@@ -43,7 +45,7 @@ const getSession = unstable_cache(
     if (!boot.sessionToken || !boot.servers?.stitcher) throw new Error("[pluto] sesión incompleta");
     return { token: boot.sessionToken, stitcher: boot.servers.stitcher, stitcherParams: boot.stitcherParams ?? "" };
   },
-  ["pluto-session"],
+  ["pluto-session-latam"],
   { revalidate: ONE_HOUR },
 );
 
@@ -70,7 +72,7 @@ interface SearchItem {
 const search = unstable_cache(
   async (q: string) =>
     (await pluto<{ data?: SearchItem[] }>(`https://service-media-search.clusters.pluto.tv/v1/search?q=${encodeURIComponent(q)}&limit=20`)).data ?? [],
-  ["pluto-search"],
+  ["pluto-search-latam"],
   { revalidate: ONE_DAY },
 );
 
@@ -185,7 +187,7 @@ const seriesEpisodes = unstable_cache(
       })),
     );
   },
-  ["pluto-series-episodes-v2"],
+  ["pluto-series-episodes-latam"],
   { revalidate: ONE_DAY },
 );
 
